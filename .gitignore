@@ -8,6 +8,9 @@ out_smoketest/
 # session scratch / generated artifacts (not part of the project)
 _repo.json
 
+# GitHub Social-preview card — uploaded via repo Settings, not a repo asset
+assets/social-card.png
+
 # developer / architecture docs — kept LOCAL, not published.
 # (architecture blueprint + render.py, the BLUEPRINT, the dev report, scratch feedback)
 docs/

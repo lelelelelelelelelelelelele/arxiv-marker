@@ -11,8 +11,9 @@
 
 Resolve the **real publication venue** of the arXiv preprints sitting in your Zotero
 library, then write it back as proper metadata — so impact-factor / journal-quartile / CCF
-plugins (easyScholar, [zotero-style](https://github.com/MuiseDestiny/zotero-style) /
-Ethereal Style) and citation-count columns
+plugins ([easyScholar](https://www.easyscholar.cc/),
+[zotero-style](https://github.com/MuiseDestiny/zotero-style) / Ethereal Style) and
+citation-count columns
 ([Citation Tally](https://github.com/daeh/zotero-citation-tally)) light up natively.
 
 A `preprint` in Zotero has no venue field, so those plugins show nothing for it. They read
@@ -98,8 +99,10 @@ Bound to `127.0.0.1` only; the write action needs `ZOTERO_API_KEY` and an explic
 
 ## What gets written, and how plugins integrate
 
-zotero-marker does not replace easyScholar, zotero-style, or Citation Tally. It fills the
-Zotero fields those plugins already know how to read.
+zotero-marker does not replace [easyScholar](https://www.easyscholar.cc/),
+[zotero-style](https://github.com/MuiseDestiny/zotero-style), or
+[Citation Tally](https://github.com/daeh/zotero-citation-tally), and is not affiliated
+with them. It fills the Zotero fields those plugins already know how to read.
 
 On write, it mainly changes/adds:
 
@@ -112,12 +115,14 @@ On write, it mainly changes/adds:
 
 Those fields then plug into the existing ecosystem:
 
-- **easyScholar + zotero-style** keep matching IF, journal-quartile, CCF, and related
-  metadata from the venue name and DOI.
-- **Citation Tally** keeps reading citation counts from `Extra`; make sure its database
-  order includes Semantic Scholar so it recognizes the `Citations:` line above.
+- **[easyScholar](https://www.easyscholar.cc/) +
+  [zotero-style](https://github.com/MuiseDestiny/zotero-style)** keep matching IF,
+  journal-quartile, CCF, and related metadata from the venue name and DOI.
+- **[Citation Tally](https://github.com/daeh/zotero-citation-tally)** keeps reading
+  citation counts from `Extra`; make sure its database order includes Semantic Scholar so
+  it recognizes the `Citations:` line above.
 
-## Limitations and tradeoffs
+## Limitations
 
 - **Venue-name mapping is not exhaustive** — Semantic Scholar / DBLP venue names do not
   always match the exact strings easyScholar uses. This project uses `write_as` in
