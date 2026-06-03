@@ -45,6 +45,49 @@ class TestSemanticScholarParsing:
         monkeypatch.setattr(s2, "_post_with_retry", lambda payload: None)
         assert s2.batch_by_arxiv(["2106.09685"]) == {}
 
+    def test_journal_venue_type_from_publication_types(self, monkeypatch):
+        # Regression: TNNLS / Science Robotics — S2 returns publicationVenue with name + issn
+        # but NO `type`, plus publicationTypes=["JournalArticle"]. Reading only pv.type left
+        # venue_type=None, so the proposal defaulted these journals to conferencePaper.
+        s2 = SemanticScholar(api_key="k")
+        rec = {
+            "publicationVenue": {  # note: no "type" key (exactly what S2 returns here)
+                "name": "IEEE Transactions on Neural Networks and Learning Systems",
+                "issn": "2162-237X"},
+            "venue": "IEEE Transactions on Neural Networks and Learning Systems",
+            "publicationTypes": ["JournalArticle"], "year": 2023, "citationCount": 143,
+        }
+        monkeypatch.setattr(s2, "_post_with_retry", lambda payload: [rec])
+        assert s2.batch_by_arxiv(["2207.10422"])["2207.10422"].venue_type == "journal"
+
+    def test_conference_venue_type_from_publication_types(self, monkeypatch):
+        s2 = SemanticScholar(api_key="k")
+        rec = {"publicationVenue": {"name": "Some Conf"}, "venue": "Some Conf",
+               "publicationTypes": ["Conference"]}
+        monkeypatch.setattr(s2, "_post_with_retry", lambda payload: [rec])
+        assert s2.batch_by_arxiv(["x"])["x"].venue_type == "conference"
+
+    def test_venue_type_falls_back_to_issn(self, monkeypatch):
+        # no pv.type, no usable publicationTypes, but an ISSN -> journal
+        s2 = SemanticScholar(api_key="k")
+        rec = {"publicationVenue": {"name": "Science Robotics", "issn": "2470-9476"},
+               "venue": "Science Robotics"}
+        monkeypatch.setattr(s2, "_post_with_retry", lambda payload: [rec])
+        assert s2.batch_by_arxiv(["y"])["y"].venue_type == "journal"
+
+    def test_explicit_pv_type_wins_over_publication_types(self, monkeypatch):
+        s2 = SemanticScholar(api_key="k")
+        rec = {"publicationVenue": {"name": "X", "type": "conference"},
+               "venue": "X", "publicationTypes": ["JournalArticle"]}
+        monkeypatch.setattr(s2, "_post_with_retry", lambda payload: [rec])
+        assert s2.batch_by_arxiv(["z"])["z"].venue_type == "conference"
+
+    def test_venue_type_none_without_any_signal(self, monkeypatch):
+        s2 = SemanticScholar(api_key="k")
+        rec = {"publicationVenue": {"name": "Mystery Venue"}, "venue": "Mystery Venue"}
+        monkeypatch.setattr(s2, "_post_with_retry", lambda payload: [rec])
+        assert s2.batch_by_arxiv(["m"])["m"].venue_type is None
+
 
 class TestSemanticScholarRetry:
     def test_retries_on_429_then_succeeds(self, monkeypatch):

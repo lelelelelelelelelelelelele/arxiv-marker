@@ -302,6 +302,27 @@ async function runResolveTests() {
     eq(res.target_item_type, null, "unknown no target type");
     eq(res.citation_count, 5, "unknown still records citations");
   }
+  // journal venue NOT in ranking table -> journalArticle (regression: TNNLS / Science Robotics)
+  {
+    const item = makeItem({ key: "J", title: "Differentiable Integrated Motion Planning", archiveID: "arXiv:2207.10422" });
+    const s2 = fakeS2({ "2207.10422": { source: "semantic_scholar", venue_raw: "IEEE Transactions on Neural Networks and Learning Systems", year: 2023, venue_type: "journal", citation_count: 143, external_doi: "10.1109/TNNLS.2023.3283542", issn: "2162-237X" } });
+    const [res] = await R.resolveItems([item], { s2, dblp: fakeDBLP(null) });
+    eq(res.kind, "journal", "journal venue kind");
+    eq(res.target_item_type, "journalArticle", "journal venue -> journalArticle");
+    eq(res.fields.publicationTitle, "IEEE Transactions on Neural Networks and Learning Systems", "journal publicationTitle");
+    ok(!("proceedingsTitle" in res.fields), "no proceedingsTitle for a journal");
+    ok(!("conferenceName" in res.fields), "no conferenceName for a journal");
+  }
+  // venue_type derivation (regression: S2 omits publicationVenue.type for TNNLS / Science Robotics)
+  {
+    const get = async (rec) =>
+      (await R.makeS2(async () => ({ status: 200, data: [rec] })).batchByArxiv(["x"]))["x"].venue_type;
+    eq(await get({ publicationVenue: { name: "TNNLS", issn: "2162-237X" }, venue: "TNNLS", publicationTypes: ["JournalArticle"] }), "journal", "venue_type journal from publicationTypes");
+    eq(await get({ publicationVenue: { name: "Conf" }, venue: "Conf", publicationTypes: ["Conference"] }), "conference", "venue_type conference from publicationTypes");
+    eq(await get({ publicationVenue: { name: "Sci Robotics", issn: "2470-9476" }, venue: "Sci Robotics" }), "journal", "venue_type journal from issn");
+    eq(await get({ publicationVenue: { name: "X", type: "conference" }, venue: "X", publicationTypes: ["JournalArticle"] }), "conference", "explicit pv.type wins");
+    eq(await get({ publicationVenue: { name: "Mystery" }, venue: "Mystery" }), null, "no signal -> null venue_type");
+  }
   // collections labelled from map
   {
     const item = makeItem({ key: "K", title: "X", archiveID: "arXiv:2106.00001", collections: ["AAA", "BBB"] });

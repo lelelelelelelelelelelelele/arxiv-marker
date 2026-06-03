@@ -141,6 +141,19 @@ function isNonvenue(v) {
   return s.includes("arxiv") || s === "corr" || s === "preprint" || s === "";
 }
 
+function _s2VenueType(pv, pubTypes) {
+  // S2 often omits publicationVenue.type even when it clearly knows the paper is a
+  // JournalArticle and gives the venue an ISSN (TNNLS / Science Robotics). Reading only
+  // pv.type made those come back null and the proposal defaulted them to conferencePaper.
+  // Fall back to the per-paper publicationTypes, then to the presence of an ISSN.
+  if (pv.type) return pv.type;
+  const types = pubTypes || [];
+  if (types.includes("JournalArticle")) return "journal";
+  if (types.includes("Conference")) return "conference";
+  if (pv.issn) return "journal";
+  return null;
+}
+
 function _authorsOf(info) {
   let a = (info.authors || {}).author;
   if (a && !Array.isArray(a)) a = [a];
@@ -202,7 +215,7 @@ function makeS2(request, apiKey, sleep) {
           source: "semantic_scholar",
           venue_raw: isNonvenue(name) ? null : name,
           year: rec.year ?? null,
-          venue_type: pv.type ?? null,
+          venue_type: _s2VenueType(pv, rec.publicationTypes),
           citation_count: rec.citationCount ?? null,
           influential_citations: rec.influentialCitationCount ?? null,
           external_doi: ext.DOI ?? null,

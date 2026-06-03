@@ -138,6 +138,26 @@ class TestResolveItems:
         assert res.target_item_type == "conferencePaper"
         assert dblp.calls == []
 
+    def test_journal_venue_not_in_table_becomes_journal_article(self, make_item):
+        # Regression: a journal venue NOT in the ranking table (TNNLS / Science Robotics) must
+        # convert to journalArticle with publicationTitle — NOT default to a conferencePaper
+        # with the journal name written into proceedingsTitle/conferenceName.
+        item = make_item(key="J", title="Differentiable Integrated Motion Planning",
+                         archiveID="arXiv:2207.10422")
+        s2 = _FakeS2({"2207.10422": VenueHit(
+            source="semantic_scholar",
+            venue_raw="IEEE Transactions on Neural Networks and Learning Systems",
+            year=2023, venue_type="journal", citation_count=143,
+            external_doi="10.1109/TNNLS.2023.3283542", issn="2162-237X")})
+        [res] = resolve_items([item], s2, _FakeDBLP(None))
+        assert res.kind == "journal"
+        assert res.target_item_type == "journalArticle"
+        assert res.fields["publicationTitle"] == \
+            "IEEE Transactions on Neural Networks and Learning Systems"
+        assert res.fields["ISSN"] == "2162-237X"
+        assert "proceedingsTitle" not in res.fields
+        assert "conferenceName" not in res.fields
+
     def test_unknown_when_no_venue(self, make_item):
         item = make_item(key="U", title="Unpublished Thing", archiveID="arXiv:2200.00001")
         s2 = _FakeS2({"2200.00001": VenueHit(source="semantic_scholar", venue_raw=None,

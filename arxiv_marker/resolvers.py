@@ -37,6 +37,29 @@ def _is_nonvenue(v: str | None) -> bool:
     return "arxiv" in s or s in {"corr", "preprint", ""}
 
 
+def _s2_venue_type(pv: dict, pub_types: list | None) -> str | None:
+    """Journal vs conference for an S2 record.
+
+    S2 frequently omits publicationVenue.type even when it clearly knows the paper is a
+    JournalArticle and gives the venue an ISSN (verified for TNNLS / Science Robotics). The
+    resolver used to read only `pv.type`, so those typeless venues came back as None and the
+    proposal defaulted them to a conferencePaper — converting real journal articles to
+    conferencePaper and writing the journal name into proceedingsTitle/conferenceName. Fall
+    back to the per-paper publicationTypes, then to the presence of an ISSN (journals have one).
+    """
+    t = pv.get("type")
+    if t:
+        return t
+    types = pub_types or []
+    if "JournalArticle" in types:
+        return "journal"
+    if "Conference" in types:
+        return "conference"
+    if pv.get("issn"):
+        return "journal"
+    return None
+
+
 def _authors_of(info: dict) -> list[str]:
     a = (info.get("authors") or {}).get("author")
     if isinstance(a, dict):
@@ -81,7 +104,7 @@ class SemanticScholar:
                     source="semantic_scholar",
                     venue_raw=(None if _is_nonvenue(name) else name),
                     year=rec.get("year"),
-                    venue_type=pv.get("type"),
+                    venue_type=_s2_venue_type(pv, rec.get("publicationTypes")),
                     citation_count=rec.get("citationCount"),
                     influential_citations=rec.get("influentialCitationCount"),
                     external_doi=ext.get("DOI"),
