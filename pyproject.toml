@@ -1,6 +1,6 @@
 [project]
 name = "arxiv-marker"
-version = "0.2.0"
+version = "0.2.1"
 description = "Resolve arXiv preprints in Zotero to their real venue + ranking (CORE/CCF) + citation count, and write them back as proper metadata so IF/分区 plugins light up."
 readme = "README.md"
 requires-python = ">=3.10"

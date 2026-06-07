@@ -6,6 +6,16 @@ All notable changes are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-06-07
+
+### Fixed
+- **Zotero 9 compatibility**: bumped `strict_max_version` to `99.99.99` and added
+  `browser_specific_settings` so the plugin installs on Zotero 9.x.
+- **Journal venue type detection**: the resolver now uses `publicationTypes` and `ISSN` to
+  distinguish journals from conferences, instead of relying solely on `publicationVenue.type`
+  which Semantic Scholar omits for some journals (e.g. TNNLS, Science Robotics). Previously
+  these were misidentified as conferences and written into `proceedingsTitle`/`conferenceName`.
+
 ## [0.2.0] — 2026-06-04
 
 ### Added
