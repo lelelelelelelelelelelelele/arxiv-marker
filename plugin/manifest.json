@@ -10,7 +10,15 @@
       "id": "arxiv-marker@lele.dev",
       "update_url": "https://github.com/lelelelelelelelelelelelele/arxiv-marker/releases/download/release/update.json",
       "strict_min_version": "6.999",
-      "strict_max_version": "10.99.99"
+      "strict_max_version": "99.99.99"
+    }
+  },
+  "browser_specific_settings": {
+    "zotero": {
+      "id": "arxiv-marker@lele.dev",
+      "update_url": "https://github.com/lelelelelelelelelelelelele/arxiv-marker/releases/download/release/update.json",
+      "strict_min_version": "6.999",
+      "strict_max_version": "99.99.99"
     }
   }
 }
