@@ -13,7 +13,7 @@ from . import __version__, config
 from .pipeline import duplicate_arxiv_groups, resolve_items
 from .rankings import lookup as _rank  # noqa: F401  (ensures table loads early)
 from .report import write_reports
-from .resolvers import DBLP, SemanticScholar
+from .resolvers import DBLP, OpenReview, SemanticScholar
 from .zotero_api import ZoteroClient
 
 
@@ -53,8 +53,9 @@ def cmd_resolve(args) -> int:
         print(f"Collections: {len(cmap)} (items will be labelled by collection)")
 
     s2 = SemanticScholar()
+    openreview = OpenReview()
     dblp = DBLP()
-    print(f"Semantic Scholar key: {'yes' if s2.has_key else 'NO (using DBLP + rate-limited S2)'}")
+    print(f"Semantic Scholar key: {'yes' if s2.has_key else 'NO (using OpenReview + DBLP + rate-limited S2)'}")
 
     n = len(items)
     def progress(res):
@@ -65,7 +66,8 @@ def cmd_resolve(args) -> int:
               f"cite={res.citation_count if res.citation_count is not None else '-'}  "
               f"{res.title[:48]}")
 
-    results = resolve_items(items, s2, dblp, progress=progress, collections_map=cmap)
+    results = resolve_items(items, s2, dblp, progress=progress, collections_map=cmap,
+                            openreview=openreview)
     csv_path, json_path, html_path = write_reports(results, args.out_path)
 
     accepted = [r for r in results if r.acceptance == "accepted"]

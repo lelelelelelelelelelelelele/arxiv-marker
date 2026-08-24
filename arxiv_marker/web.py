@@ -15,7 +15,7 @@ import json
 from . import config
 from .pipeline import resolve_items
 from .report import write_reports
-from .resolvers import DBLP, SemanticScholar
+from .resolvers import DBLP, OpenReview, SemanticScholar
 from .zotero_api import ZoteroClient
 
 
@@ -72,7 +72,8 @@ def create_app():
             cmap = zot.get_collections()
         except Exception:  # noqa: BLE001
             cmap = {}
-        results = resolve_items(items, SemanticScholar(), DBLP(), collections_map=cmap)
+        results = resolve_items(items, SemanticScholar(), DBLP(), collections_map=cmap,
+                                openreview=OpenReview())
         write_reports(results)
         return [r.to_dict() for r in results]
 

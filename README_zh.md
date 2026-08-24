@@ -15,7 +15,7 @@
 
 Zotero 的 `preprint` 类型没有 venue 字段，所以这些插件读不到任何会议或期刊信息。它们读取的是 **venue 字段**：期刊用 `publicationTitle`，会议用 `proceedingsTitle` / `conferenceName`，easyScholar 再按 venue 名称 + DOI 去匹配；它们**不会读取 tags**。因此 arxiv-marker 会转换 `itemType`，填写 venue 和标识符，同时把 arXiv id 与引用数保留在 `Extra`。
 
-它的策略是 **deterministic-first**：优先用 Semantic Scholar（按 arXiv id 查询）和 DBLP 免费解析 venue，尽量做到零幻觉。难以确认的条目会留给你审核，而不是硬猜。全程**运行在 Zotero 内部**——不需要 Python、不需要本地服务、不需要 Web API key。
+它的策略是 **deterministic-first**：优先用 Semantic Scholar（按 arXiv id 查询）、OpenReview 结构化 API 和 DBLP 免费解析 venue，尽量做到零幻觉。难以确认的条目会留给你审核，而不是硬猜。全程**运行在 Zotero 内部**——不需要 Python、不需要本地服务、不需要 Web API key。
 
 > **为什么不用现有 arXiv 插件？** 它们通常依赖作者在 arXiv 页面登记的 *published DOI* 合并条目。但 NeurIPS / ICLR / 较早的 CVPR 论文很多没有 Crossref DOI（它们在 proceedings 站点或 OpenReview 上），所以 DOI-first 工具反而会漏掉这些知名论文。按 **arXiv id → Semantic Scholar** 查询，可以利用 S2 对预印本和正式发表版本的去重结果来解决这个问题。
 
@@ -71,7 +71,7 @@ arxiv-marker 不替代 [easyScholar](https://www.easyscholar.cc/)、
 
 ## 已知限制
 
-- **会议名映射不可能覆盖所有 venue**：Semantic Scholar / DBLP 返回的 venue 名称，和
+- **会议名映射不可能覆盖所有 venue**：Semantic Scholar / OpenReview / DBLP 返回的 venue 名称，和
   easyScholar 实际用于匹配的名称有时不完全一致。本项目用 `data/venue_rankings.csv`
   里的 `write_as` 做常见顶会映射，但这不是完整知识库；长尾会议可能需要你补充映射或用
   `data/overrides.csv` 手动覆盖。
@@ -86,7 +86,7 @@ arxiv-marker 不替代 [easyScholar](https://www.easyscholar.cc/)、
 
 | confidence | 含义 | 默认写入？ |
 |---|---|---|
-| 0.95 | 至少两个独立来源（S2 + DBLP）认可同一个已知 venue | ✓ |
+| 0.95 | 至少两个独立结构化来源认可同一个已知 venue | ✓ |
 | 0.85 | 一个来源命中，且 venue 在排名表中 | ✓ |
 | 0.60 | 找到了 venue 字符串，但不在排名表中 | ✗ |
 | 0.00 | 没有找到 venue → `acceptance=unknown` | ✗ |
@@ -102,7 +102,7 @@ arxiv-marker 不替代 [easyScholar](https://www.easyscholar.cc/)、
 
 ## 进阶：CLI 与本地 Web UI
 
-同一套确定性 resolver 也提供 Python CLI（以及可选的本地 Web UI），用于批量处理、脚本化或无界面运行。插件是这套 resolver 的忠实移植——两者由一个 [parity 测试](plugin/test/parity.mjs) 保持同步，它会让 JS 和 Python 同时对真实的 Semantic Scholar / DBLP 跑一遍。
+同一套确定性 resolver 也提供 Python CLI（以及可选的本地 Web UI），用于批量处理、脚本化或无界面运行。插件是这套 resolver 的忠实移植——两者由一个 [parity 测试](plugin/test/parity.mjs) 保持同步，它会让 JS 和 Python 同时对真实的 Semantic Scholar / OpenReview / DBLP 跑一遍。
 
 项目使用 [uv](https://docs.astral.sh/uv/)。克隆仓库后：
 
@@ -138,8 +138,8 @@ uv run python run.py web        # 浏览器前端 http://127.0.0.1:8000（仅绑
 **免费吗？**
 免费。DBLP 免费且无需 key；Zotero 的 API 免费；Semantic Scholar key 可选，只用于提高限额。
 
-**DBLP 是什么，为什么要和 Semantic Scholar 一起用？**
-[DBLP](https://dblp.org) 是免费开放的计算机科学文献数据库，由 Schloss Dagstuhl 维护。它对 CS **会议** 覆盖非常好，而会议正是 Crossref 和 Semantic Scholar 相对薄弱的地方。arxiv-marker 把它作为 fallback：当 S2 没有返回 venue，或返回了后来的期刊再版时，DBLP 可以通过标题 + 作者 + 年份找回原始会议。
+**DBLP 是什么，为什么要和 Semantic Scholar、OpenReview 一起用？**
+[DBLP](https://dblp.org) 是免费开放的计算机科学文献数据库，由 Schloss Dagstuhl 维护。它对 CS **会议** 覆盖非常好，而会议正是 Crossref 和 Semantic Scholar 相对薄弱的地方。arxiv-marker 会先检查 OpenReview 的正式录用记录；如果没有，再回退到 DBLP。当 S2 返回后来的期刊再版时，DBLP 也可以通过标题 + 作者 + 年份找回原始会议。
 
 **只支持 arXiv 论文吗？**
 工具只处理 Zotero `preprint` 条目，你已经整理好的正式出版条目不会被碰。arXiv 预印本能拿到完整结果（venue **和**引用数）。没有 arXiv id 的 preprint 仍可能通过 DBLP 标题搜索找到 venue，但不会有引用数（引用数来自 Semantic Scholar，并按 arXiv id 查询）。
@@ -171,7 +171,7 @@ CI（GitHub Actions）会在 Python 3.10–3.13 上运行 ruff + pytest。参见
 ## 后续可能改进
 
 - **引用数刷新**：为已经写回的条目更新 `Extra` 里的 `Citations:` 行。
-- **更强的疑难 venue 解析**：在 Semantic Scholar 和 DBLP 都找不到时，引入可审核的网页证据。
+- **更强的疑难 venue 解析**：在 Semantic Scholar、OpenReview 和 DBLP 都找不到时，引入可审核的网页证据。
 - **更广的学科覆盖**：把 venue 解析扩展到 CS/ML 之外。
 
 ## 项目结构

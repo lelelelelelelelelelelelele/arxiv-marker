@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import overrides, proposal, rankings, util
-from .resolvers import DBLP, SemanticScholar, VenueHit
+from .resolvers import DBLP, OpenReview, SemanticScholar, VenueHit
 
 
 @dataclass
@@ -55,6 +55,20 @@ def _item_year(data: dict) -> int | None:
         if chunk.isdigit() and chunk.startswith(("19", "20")):
             return int(chunk)
     return None
+
+
+def _item_authors(data: dict) -> list[str]:
+    authors = []
+    for creator in data.get("creators", []) or []:
+        if creator.get("creatorType") != "author":
+            continue
+        if creator.get("name"):
+            authors.append(creator["name"])
+            continue
+        name = " ".join(x for x in (creator.get("firstName"), creator.get("lastName")) if x)
+        if name:
+            authors.append(name)
+    return authors
 
 
 def _choose_venue(hits: list[VenueHit]):
@@ -120,8 +134,9 @@ def duplicate_arxiv_groups(results: list[Resolution]) -> dict[str, list[str]]:
 
 
 def resolve_items(items: list[dict], s2: SemanticScholar, dblp: DBLP,
-                  progress=None, collections_map: dict | None = None) -> list[Resolution]:
-    """items = raw Zotero item dicts. Deterministic cascade: S2 (batch) -> DBLP (residual).
+                  progress=None, collections_map: dict | None = None,
+                  openreview: OpenReview | None = None) -> list[Resolution]:
+    """Resolve raw Zotero items via S2 -> OpenReview -> DBLP.
 
     collections_map (key -> display path, from ZoteroClient.get_collections) labels each
     item with its Zotero collection(s) so the review UIs can filter by collection.
@@ -133,6 +148,9 @@ def resolve_items(items: list[dict], s2: SemanticScholar, dblp: DBLP,
     s2_map = s2.batch_by_arxiv(ids) if ids else {}
 
     results: list[Resolution] = []
+    # Resolution is intentionally sequential (at most one OpenReview request in flight),
+    # and this run-local cache prevents duplicate lookups for duplicate Zotero items.
+    openreview_cache: dict[tuple, VenueHit | None] = {}
     for it in items:
         data = it["data"]
         key = it["key"]
@@ -141,16 +159,27 @@ def resolve_items(items: list[dict], s2: SemanticScholar, dblp: DBLP,
         s2_hit = s2_map.get(aid) if aid else None
 
         hits: list[VenueHit] = [h for h in [s2_hit] if h]
-        # 2) DBLP fallback when S2 gave no venue, OR gave a venue that isn't a
+        # 2) Structured fallbacks when S2 gave no venue, OR gave a venue that isn't a
         #    recognized conference (catches journal republications, e.g. GANs->CACM
         #    where the original is NeurIPS'14). Deterministic-first, still cheap.
-        need_dblp = (not s2_hit) or (not s2_hit.venue_raw)
-        if not need_dblp:
+        need_fallback = (not s2_hit) or (not s2_hit.venue_raw)
+        if not need_fallback:
             row = rankings.lookup(s2_hit.venue_raw)
             if not (row and row["kind"] == "conference"):
-                need_dblp = True
-        if need_dblp:
-            year_hint = (s2_hit.year if s2_hit else None) or _item_year(data)
+                need_fallback = True
+        year_hint = (s2_hit.year if s2_hit else None) or _item_year(data)
+        openreview_hit = None
+        if need_fallback and openreview:
+            authors = _item_authors(data)
+            cache_key = (("arxiv", aid) if aid else
+                         ("metadata", util.norm_title(title), tuple(authors), year_hint))
+            if cache_key not in openreview_cache:
+                openreview_cache[cache_key] = openreview.best_by_title(
+                    title, authors, year_hint, aid)
+            openreview_hit = openreview_cache[cache_key]
+            if openreview_hit:
+                hits.append(openreview_hit)
+        if need_fallback and not openreview_hit:
             dblp_hit = dblp.best_by_title(
                 title, util.first_author_lastname(data), year_hint)
             if dblp_hit:
@@ -200,7 +229,9 @@ def resolve_items(items: list[dict], s2: SemanticScholar, dblp: DBLP,
             res.suggested_tags = build_tags(res)
 
         # field-writing proposal: itemType change + venue metadata fields
-        res.target_item_type, res.fields = proposal.build(res, s2_hit, aid, data)
+        proposal_hit = (chosen if chosen and chosen.source == "openreview"
+                        and chosen.external_doi else s2_hit)
+        res.target_item_type, res.fields = proposal.build(res, proposal_hit, aid, data)
 
         results.append(res)
         if progress:

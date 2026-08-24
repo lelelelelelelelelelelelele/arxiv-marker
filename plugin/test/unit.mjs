@@ -205,6 +205,170 @@ function makeItem(over = {}) {
   }
 }
 
+// ===================== OpenReview resolver =====================
+function openReviewNote(title, {
+  venue = "ICML 2026 spotlight",
+  venueId = "ICML.cc/2026/Conference",
+  authors = ["Ada Lovelace", "Grace Hopper"],
+  forum = "forum-id",
+  domain = venueId,
+  ...content
+} = {}) {
+  const values = {
+    title: { value: title }, authors: { value: authors }, venue: { value: venue },
+    venueid: { value: venueId },
+  };
+  for (const [key, value] of Object.entries(content)) values[key] = { value };
+  return { id: forum, forum, domain, content: values };
+}
+
+function openReviewWithNotes(notes, status = 200) {
+  return R.makeOpenReview(async () => ({ status, data: { notes } }));
+}
+
+async function runOpenReviewTests() {
+  const tex = "From $f(x)$ and $g(x)$ to $f(g(x))$: LLMs Learn New Skills";
+  const rendered = "From f(x) and g(x) to f(g(x)): LLMs Learn New Skills";
+  eq(R.openReviewNormTitle(tex), R.openReviewNormTitle(rendered), "OpenReview strips TeX delimiters");
+  ok(R.openReviewNormTitle(tex).includes("f(g(x))"), "OpenReview preserves math expression");
+  {
+    const calls = [];
+    const note = openReviewNote(rendered, {
+      venue: "ICLR 2026 Poster", venueId: "ICLR.cc/2026/Conference", authors: ["Lifan Yuan"],
+    });
+    const resolver = R.makeOpenReview(async (_method, url) => {
+      calls.push(url);
+      return { status: 200, data: { notes: [note] } };
+    });
+    const hit = await resolver.bestByTitle(tex, ["Lifan Yuan"], 2026, "2509.25123");
+    eq(hit.venue_raw, "ICLR 2026", "OpenReview searches TeX title without delimiters");
+    eq(calls.length, 1, "OpenReview sends one normalized title query");
+    ok(!calls[0].includes("%24"), "OpenReview query omits encoded TeX dollar delimiters");
+  }
+
+  {
+    const title = "RAGEN-2: Reasoning Collapse in Agentic RL";
+    const authors = ["Zihan Wang", "Chi Gui", "Xing Jin"];
+    const notes = [
+      openReviewNote(title, { venue: "ICML 2026 RLxF Workshop", venueId: "ICML.cc/2026/Workshop/RLxF", authors, forum: "workshop" }),
+      openReviewNote(title, { authors, forum: "01caH9oj7C" }),
+    ];
+    const hit = await openReviewWithNotes(notes).bestByTitle(title, authors, 2026, "2604.06268");
+    eq(hit.source, "openreview", "RAGEN source OpenReview");
+    eq(hit.venue_raw, "ICML 2026", "RAGEN main ICML beats workshop");
+    eq(hit.year, 2026, "RAGEN year");
+    ok(hit.evidence_url.endsWith("01caH9oj7C"), "RAGEN evidence forum");
+  }
+  {
+    const title = "The Flexibility Trap: Rethinking the Value of Arbitrary Order in Diffusion Language Models";
+    const note = openReviewNote(title, { authors: ["Zanlin Ni", "Shenzhi Wang"], forum: "kpgURPRMGf", doi: "10.1234/flex" });
+    const hit = await openReviewWithNotes([note]).bestByTitle(title, ["Zanlin Ni"], 2026, "2601.15165");
+    eq(hit.venue_raw, "ICML 2026", "Flexibility Trap resolves ICML");
+    eq(hit.external_doi, "10.1234/flex", "OpenReview DOI extracted");
+  }
+  {
+    const query = "From $f(x)$ and $g(x)$ to $f(g(x))$";
+    const full = "From f(x) and g(x) to f(g(x)): LLMs Learn New Skills in RL by Composing Old Ones";
+    const note = openReviewNote(full, {
+      venue: "ICLR 2026 Poster", venueId: "ICLR.cc/2026/Conference",
+      authors: ["Lifan Yuan", "Weize Chen"], forum: "jt7oCtYqHE",
+    });
+    const hit = await openReviewWithNotes([note]).bestByTitle(query, ["Lifan Yuan"], 2025, "2509.25123");
+    eq(hit.venue_raw, "ICLR 2026", "f(g(x)) resolves ICLR with subtitle");
+  }
+
+  for (const [venue, venueId] of [
+    ["Submitted to ICLR 2026", "ICLR.cc/2026/Conference/Submission"],
+    ["Under Review", "ICML.cc/2026/Conference/Submission"],
+    ["ICLR 2026 Rejected Submission", "ICLR.cc/2026/Conference/Rejected_Submission"],
+    ["Withdrawn Submission", "ICLR.cc/2026/Conference/Withdrawn_Submission"],
+    ["Desk Rejected", "ICLR.cc/2026/Conference/Desk_Rejected_Submission"],
+    ["Poster", "ICLR.cc/2026/Conference"],
+  ]) {
+    const note = openReviewNote("Exact Title", { venue, venueId, authors: ["Ada Lovelace"] });
+    eq(await openReviewWithNotes([note]).bestByTitle("Exact Title", ["Ada Lovelace"], 2026), null, `rejects ${venue}`);
+  }
+  for (const [field, value] of [["decision", "Reject"], ["status", "Under Review"]]) {
+    const note = openReviewNote("Exact Title", { authors: ["Ada Lovelace"], [field]: value });
+    eq(await openReviewWithNotes([note]).bestByTitle("Exact Title", ["Ada Lovelace"], 2026), null, `rejects structured ${field}`);
+  }
+  {
+    const corr = openReviewNote("Exact Title", { venue: "CoRR", venueId: "arXiv/2601.00001", forum: "corr" });
+    const dblp = openReviewNote("Exact Title", { domain: "dblp.org/rec/conf/icml", forum: "dblp" });
+    eq(await openReviewWithNotes([corr, dblp]).bestByTitle("Exact Title", ["Ada Lovelace"], 2026), null, "rejects CoRR and DBLP mirrors");
+  }
+  {
+    const collision = openReviewNote("Same Title", { authors: ["Different Person"] });
+    eq(await openReviewWithNotes([collision]).bestByTitle("Same Title", ["Ada Lovelace"], 2026), null, "rejects exact-title author collision");
+    const sharedNonfirst = openReviewNote("Same Title", { authors: ["Different Person", "Ada Lovelace"] });
+    eq(await openReviewWithNotes([sharedNonfirst]).bestByTitle("Same Title", ["Ada Lovelace"], 2026), null, "one shared non-first author is insufficient");
+    const commaName = openReviewNote("Same Title", { authors: ["Lovelace, Ada"] });
+    const hit = await openReviewWithNotes([commaName]).bestByTitle("Same Title", ["Ada Lovelace"], 2026);
+    eq(hit.venue_raw, "ICML 2026", "accepts surname-first comma author format");
+  }
+  {
+    const notes = [
+      openReviewNote("Same Title", { venue: "ICML 2026 Oral", venueId: "ICML.cc/2026/Conference", authors: ["Ada Lovelace"], forum: "icml" }),
+      openReviewNote("Same Title", { venue: "ICLR 2026 Oral", venueId: "ICLR.cc/2026/Conference", authors: ["Ada Lovelace"], forum: "iclr" }),
+    ];
+    eq(await openReviewWithNotes(notes).bestByTitle("Same Title", ["Ada Lovelace"], 2026), null, "abstains on equally strong venue conflict");
+  }
+  {
+    const calls = [];
+    const delays = [];
+    const resolver = R.makeOpenReview(
+      async () => { calls.push(1); return { status: 429, data: {} }; },
+      async (ms) => { delays.push(ms); },
+      () => 0.5,
+    );
+    eq(await resolver.bestByTitle("T"), null, "OpenReview repeated 429 falls through");
+    eq(calls.length, 3, "OpenReview caps 429 retries");
+    eq(delays, [1500, 2500], "OpenReview exponential backoff includes jitter");
+  }
+  {
+    const delays = [];
+    const note = openReviewNote("Exact Title", { authors: ["Ada Lovelace"] });
+    const responses = [
+      { status: 429, data: {}, headers: { "Retry-After": "3" } },
+      { status: 200, data: { notes: [note] } },
+    ];
+    const resolver = R.makeOpenReview(
+      async () => responses.shift(),
+      async (ms) => { delays.push(ms); },
+      () => 0.5,
+    );
+    const hit = await resolver.bestByTitle("Exact Title", ["Ada Lovelace"], 2026);
+    eq(hit.venue_raw, "ICML 2026", "OpenReview succeeds after Retry-After");
+    eq(delays, [3000], "OpenReview respects Retry-After");
+  }
+  {
+    const delays = [];
+    const resolver = R.makeOpenReview(
+      async () => ({ status: 429, data: {}, headers: { "retry-after": "999" } }),
+      async (ms) => { delays.push(ms); },
+      () => 0.5,
+      1,
+    );
+    eq(await resolver.bestByTitle("T"), null, "OpenReview capped retries still fall through");
+    eq(delays, [999000], "Retry-After is not shortened by local backoff cap");
+  }
+  {
+    const calls = [];
+    const resolver = R.makeOpenReview(
+      async () => { calls.push(1); return { status: 500, data: {} }; },
+      async () => {},
+    );
+    eq(await resolver.bestByTitle("T"), null, "OpenReview HTTP 500 falls through");
+    eq(calls.length, 1, "OpenReview does not retry non-429 failures");
+  }
+  eq(await R.makeOpenReview(async () => { throw new Error("timeout"); }).bestByTitle("T"), null, "OpenReview timeout falls through");
+  for (const data of [null, {}, { notes: [] }, { notes: [{ content: {} }] }]) {
+    eq(await R.makeOpenReview(async () => ({ status: 200, data })).bestByTitle("T"), null, "OpenReview malformed payload falls through");
+  }
+}
+
+await runOpenReviewTests();
+
 // ===================== pipeline (sync helpers) =====================
 {
   const buckets = [[null, null], [4, "<10"], [10, "10+"], [60, "50+"], [150, "100+"], [600, "500+"], [1200, "1000+"], [6000, "5000+"], [15000, "10000+"]];
@@ -268,6 +432,10 @@ function fakeDBLP(hit = null) {
   const calls = [];
   return { calls, async bestByTitle(t, a, y) { calls.push([t, a, y]); return hit; } };
 }
+function fakeOpenReview(hit = null) {
+  const calls = [];
+  return { calls, async bestByTitle(t, a, y, id) { calls.push([t, a, y, id]); return hit; } };
+}
 async function runResolveTests() {
   // journal republication prefers original conference
   {
@@ -287,10 +455,12 @@ async function runResolveTests() {
   {
     const item = makeItem({ key: "K", title: "Some ICLR Paper", archiveID: "arXiv:2106.00001" });
     const s2 = fakeS2({ "2106.00001": { source: "semantic_scholar", venue_raw: "International Conference on Learning Representations", year: 2021, venue_type: "conference", citation_count: 10 } });
+    const openreview = fakeOpenReview();
     const dblp = fakeDBLP();
-    const [res] = await R.resolveItems([item], { s2, dblp });
+    const [res] = await R.resolveItems([item], { s2, openreview, dblp });
     eq(res.canonical, "ICLR", "clean conf canonical ICLR");
     eq(res.target_item_type, "conferencePaper", "clean conf target");
+    eq(openreview.calls.length, 0, "clean conf no OpenReview call");
     eq(dblp.calls.length, 0, "clean conf no dblp call");
   }
   // unknown when no venue
@@ -301,6 +471,46 @@ async function runResolveTests() {
     eq(res.acceptance, "unknown", "unknown acceptance");
     eq(res.target_item_type, null, "unknown no target type");
     eq(res.citation_count, 5, "unknown still records citations");
+  }
+  // OpenReview resolves a recent paper before DBLP
+  {
+    const item = makeItem({
+      key: "OR", title: "Recent Paper", archiveID: "arXiv:2601.00001", date: "2026",
+      creators: [{ creatorType: "author", firstName: "Ada", lastName: "Lovelace" }],
+    });
+    const s2 = fakeS2({ "2601.00001": { source: "semantic_scholar", venue_raw: null, citation_count: 3 } });
+    const openreview = fakeOpenReview({ source: "openreview", venue_raw: "ICML 2026", year: 2026, venue_type: "conference", external_doi: "10.1234/recent" });
+    const dblp = fakeDBLP({ source: "dblp", venue_raw: "NeurIPS", year: 2026 });
+    const [res] = await R.resolveItems([item], { s2, openreview, dblp });
+    eq(res.canonical, "ICML", "OpenReview pipeline canonical");
+    eq(res.confidence, 0.85, "OpenReview single recognized confidence");
+    eq(res.sources, ["semantic_scholar", "openreview"], "OpenReview pipeline sources");
+    eq(res.fields.DOI, "10.1234/recent", "OpenReview DOI reaches proposal");
+    eq(openreview.calls, [["Recent Paper", ["Ada Lovelace"], 2026, "2601.00001"]], "OpenReview receives metadata");
+    eq(dblp.calls.length, 0, "OpenReview hit skips DBLP");
+  }
+  // OpenReview miss falls through to DBLP
+  {
+    const item = makeItem({ key: "F", title: "Fallback Paper", archiveID: "arXiv:2601.00002", creators: [{ creatorType: "author", lastName: "Lovelace" }] });
+    const s2 = fakeS2({ "2601.00002": { source: "semantic_scholar", venue_raw: null } });
+    const openreview = fakeOpenReview(null);
+    const dblp = fakeDBLP({ source: "dblp", venue_raw: "ICLR", year: 2026, venue_type: "conference" });
+    const [res] = await R.resolveItems([item], { s2, openreview, dblp });
+    eq(res.canonical, "ICLR", "DBLP fallback after OpenReview miss");
+    eq(openreview.calls.length, 1, "OpenReview consulted once");
+    eq(dblp.calls, [["Fallback Paper", "Lovelace", null]], "DBLP receives fallback call");
+  }
+  // Duplicate Zotero entries share one OpenReview lookup within a resolution run
+  {
+    const items = [
+      makeItem({ key: "A", title: "Duplicate Paper", archiveID: "arXiv:2601.00003" }),
+      makeItem({ key: "B", title: "Duplicate Paper", archiveID: "arXiv:2601.00003" }),
+    ];
+    const s2 = fakeS2({ "2601.00003": { source: "semantic_scholar", venue_raw: null } });
+    const openreview = fakeOpenReview({ source: "openreview", venue_raw: "ICML 2026", year: 2026, venue_type: "conference" });
+    const results = await R.resolveItems(items, { s2, openreview, dblp: fakeDBLP(null) });
+    eq(results.map((r) => r.canonical), ["ICML", "ICML"], "duplicate items reuse OpenReview hit");
+    eq(openreview.calls.length, 1, "duplicate arXiv id queried once per run");
   }
   // journal venue NOT in ranking table -> journalArticle (regression: TNNLS / Science Robotics)
   {

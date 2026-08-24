@@ -1,12 +1,12 @@
 [project]
 name = "arxiv-marker"
-version = "0.2.1"
+version = "0.2.2"
 description = "Resolve arXiv preprints in Zotero to their real venue + ranking (CORE/CCF) + citation count, and write them back as proper metadata so IF/分区 plugins light up."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["zotero", "arxiv", "bibliography", "semantic-scholar", "dblp", "ccf", "core-ranking", "research-tools"]
+keywords = ["zotero", "arxiv", "bibliography", "semantic-scholar", "openreview", "dblp", "ccf", "core-ranking", "research-tools"]
 authors = [{ name = "arxiv-marker contributors" }]
 classifiers = [
     "Development Status :: 4 - Beta",
