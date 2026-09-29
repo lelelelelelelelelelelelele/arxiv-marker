@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 from arxiv_marker import pipeline
@@ -10,7 +12,7 @@ from arxiv_marker.pipeline import (
     duplicate_arxiv_groups,
     resolve_items,
 )
-from arxiv_marker.resolvers import VenueHit
+from arxiv_marker.resolvers import OpenReview, VenueHit
 
 
 class TestCiteBucket:
@@ -120,6 +122,55 @@ class _FakeOpenReview:
 
 
 class TestResolveItems:
+    @pytest.mark.parametrize("source", ["semantic_scholar", "openreview", "dblp"])
+    @pytest.mark.parametrize("venue", [
+        "ICML", "ICML 2026", "International Conference on Machine Learning",
+        "International Conference on Machine Learning 2026",
+    ])
+    def test_conference_write_name_is_independent_of_source(
+            self, monkeypatch, make_item, source, venue):
+        # Synthetic metadata for the reported arXiv ID; no live paper/API dependency.
+        aid = "2606.10309"
+        item = make_item(title="Regular Paper", archiveID=f"arXiv:{aid}", date="2026",
+                         creators=[{"creatorType": "author", "firstName": "Ada",
+                                    "lastName": "Lovelace"}])
+        hit = VenueHit(source=source, venue_raw=venue, year=2026, venue_type="conference")
+        s2 = _FakeS2({aid: hit} if source == "semantic_scholar" else {})
+        dblp = _FakeDBLP(hit if source == "dblp" else None)
+        openreview = OpenReview()
+        note = {"forum": "regular-forum", "content": {
+            "title": {"value": item["data"]["title"]},
+            "authors": {"value": ["Ada Lovelace"]},
+            "venue": {"value": f"{venue} regular"},
+            "venueid": {"value": "ICML.cc/2026/Conference"},
+        }}
+        response = Mock()
+        response.json.return_value = {"notes": [note] if source == "openreview" else []}
+        response.status_code = 200
+        request = Mock(return_value=response)
+        monkeypatch.setattr(openreview.s, "get", request)
+
+        [res] = resolve_items([item], s2, dblp, openreview=openreview)
+        assert res.canonical == "ICML"
+        assert res.core_tier == "A*"
+        assert res.confidence == 0.85
+        assert res.acceptance == "accepted"
+        assert res.year == 2026
+        assert res.sources == [source]
+        assert res.target_item_type == "conferencePaper"
+        name = "International Conference on Machine Learning"
+        assert res.fields["proceedingsTitle"] == res.fields["conferenceName"] == name
+        assert "date" not in res.fields
+        assert item["data"]["itemType"] == "preprint"  # proposal does not mutate the item
+        assert request.call_count == (0 if source == "semantic_scholar" else 1)
+        assert len(dblp.calls) == (1 if source == "dblp" else 0)
+
+        # Applying the proposal then resolving again must not propose another rewrite.
+        item["data"].update(res.fields, itemType=res.target_item_type)
+        [again] = resolve_items([item], s2, dblp, openreview=openreview)
+        assert again.target_item_type is None
+        assert again.fields == {}
+
     def test_journal_republication_prefers_original_conference(self, make_item):
         item = make_item(key="GAN", title="Generative Adversarial Nets",
                          archiveID="arXiv:1406.2661",

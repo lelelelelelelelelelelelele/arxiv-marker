@@ -8,28 +8,28 @@ var ZM_RANKINGS = [
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "neurips|nips|neural information processing systems|advances in neural information processing systems",
-    "write_as": ""
+    "write_as": "Advances in Neural Information Processing Systems"
   },
   {
     "canonical": "ICML",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "icml|international conference on machine learning",
-    "write_as": ""
+    "write_as": "International Conference on Machine Learning"
   },
   {
     "canonical": "ICLR",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "iclr|international conference on learning representations",
-    "write_as": ""
+    "write_as": "International Conference on Learning Representations"
   },
   {
     "canonical": "CVPR",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "cvpr|computer vision and pattern recognition|ieee/cvf conference on computer vision and pattern recognition",
-    "write_as": ""
+    "write_as": "IEEE/CVF Conference on Computer Vision and Pattern Recognition"
   },
   {
     "canonical": "ICCV",
@@ -43,119 +43,119 @@ var ZM_RANKINGS = [
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "eccv|european conference on computer vision",
-    "write_as": ""
+    "write_as": "European Conference on Computer Vision"
   },
   {
     "canonical": "AAAI",
     "kind": "conference",
     "core_tier": "A*",
-    "aliases": "aaai|association for the advancement of artificial intelligence",
-    "write_as": ""
+    "aliases": "aaai|association for the advancement of artificial intelligence|aaai conference on artificial intelligence",
+    "write_as": "AAAI Conference on Artificial Intelligence"
   },
   {
     "canonical": "IJCAI",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "ijcai|international joint conference on artificial intelligence",
-    "write_as": ""
+    "write_as": "International Joint Conference on Artificial Intelligence"
   },
   {
     "canonical": "ACL",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "annual meeting of the association for computational linguistics|association for computational linguistics",
-    "write_as": ""
+    "write_as": "Annual Meeting of the Association for Computational Linguistics"
   },
   {
     "canonical": "EMNLP",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "emnlp|empirical methods in natural language processing",
-    "write_as": ""
+    "write_as": "Conference on Empirical Methods in Natural Language Processing"
   },
   {
     "canonical": "NAACL",
     "kind": "conference",
     "core_tier": "A",
-    "aliases": "naacl|north american chapter of the association for computational linguistics",
-    "write_as": ""
+    "aliases": "naacl|north american chapter of the association for computational linguistics|annual conference of the nations of the americas chapter of the association for computational linguistics|conference of the north american chapter of the association for computational linguistics: human language technologies",
+    "write_as": "Annual Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics"
   },
   {
     "canonical": "COLT",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "colt|conference on learning theory|computational learning theory",
-    "write_as": ""
+    "write_as": "Conference on Learning Theory"
   },
   {
     "canonical": "UAI",
     "kind": "conference",
     "core_tier": "A",
     "aliases": "uai|uncertainty in artificial intelligence",
-    "write_as": ""
+    "write_as": "Conference on Uncertainty in Artificial Intelligence"
   },
   {
     "canonical": "AISTATS",
     "kind": "conference",
     "core_tier": "A",
     "aliases": "aistats|artificial intelligence and statistics",
-    "write_as": ""
+    "write_as": "International Conference on Artificial Intelligence and Statistics"
   },
   {
     "canonical": "KDD",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "kdd|knowledge discovery and data mining",
-    "write_as": ""
+    "write_as": "ACM SIGKDD Conference on Knowledge Discovery and Data Mining"
   },
   {
     "canonical": "SIGIR",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "sigir|research and development in information retrieval",
-    "write_as": ""
+    "write_as": "International ACM SIGIR Conference on Research and Development in Information Retrieval"
   },
   {
     "canonical": "WWW",
     "kind": "conference",
     "core_tier": "A*",
-    "aliases": "the web conference|world wide web conference",
-    "write_as": ""
+    "aliases": "the web conference|world wide web conference|acm web conference",
+    "write_as": "ACM Web Conference"
   },
   {
     "canonical": "WACV",
     "kind": "conference",
     "core_tier": "A",
     "aliases": "wacv|winter conference on applications of computer vision",
-    "write_as": ""
+    "write_as": "IEEE/CVF Winter Conference on Applications of Computer Vision"
   },
   {
     "canonical": "ACM MM",
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "acm multimedia|acm international conference on multimedia",
-    "write_as": ""
+    "write_as": "ACM International Conference on Multimedia"
   },
   {
     "canonical": "ICRA",
     "kind": "conference",
     "core_tier": "A",
     "aliases": "icra|international conference on robotics and automation",
-    "write_as": ""
+    "write_as": "IEEE International Conference on Robotics and Automation"
   },
   {
     "canonical": "IROS",
     "kind": "conference",
     "core_tier": "A",
     "aliases": "iros|intelligent robots and systems",
-    "write_as": ""
+    "write_as": "IEEE/RSJ International Conference on Intelligent Robots and Systems"
   },
   {
     "canonical": "SIGGRAPH",
     "kind": "conference",
     "core_tier": "A*",
-    "aliases": "siggraph",
-    "write_as": ""
+    "aliases": "siggraph|international conference on computer graphics and interactive techniques",
+    "write_as": "International Conference on Computer Graphics and Interactive Techniques"
   },
   {
     "canonical": "JMLR",
@@ -225,7 +225,7 @@ var ZM_RANKINGS = [
     "kind": "conference",
     "core_tier": "A*",
     "aliases": "usenix security",
-    "write_as": ""
+    "write_as": "USENIX Security Symposium"
   },
   {
     "canonical": "ACM Computing Surveys",

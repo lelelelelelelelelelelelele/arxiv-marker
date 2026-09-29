@@ -119,16 +119,20 @@ function lookupRanking(venueRaw) {
   if (!vTokens.length) return null;
   const blocked = vTokens.some((t) => _DISQUALIFIERS.has(t));
   let substringHit = null;
+  let matchedTokens = 0;
   for (const row of _table()) {
     for (const a of row.aliases) {
       if (v === a) return row;
-      if (blocked || substringHit !== null) continue;
+      if (blocked) continue;
       const at = _tokens(a);
+      // Prefer the complete NAACL alias over the shorter ACL alias inside it.
+      if (at.length <= matchedTokens) continue;
       const idx = _runIndex(vTokens, at);
       if (idx < 0) continue;
       const after = vTokens.slice(idx + at.length);
       if (after.length && !after.every((t) => /^\d+$/.test(t) || _GENERIC_SUFFIX.has(t))) continue;
       substringHit = row;
+      matchedTokens = at.length;
     }
   }
   return substringHit;
@@ -164,7 +168,7 @@ const _OPENREVIEW_SEARCH = "https://api2.openreview.net/notes/search";
 const _OPENREVIEW_REJECT_STATE =
   /\b(?:submitted|submission|reject(?:ed|ion)?|withdrawn)\b|\bunder[\s_-]+review\b|\bdesk[\s_-]+rejected\b/i;
 const _OPENREVIEW_PRESENTATION =
-  /(?:\s*[-–—,:]\s*|\s+)(?:poster|spotlight|oral)(?:\s+presentation)?\s*$/i;
+  /(?:\s*[-–—,:]\s*|\s+)(?:poster|spotlight|oral|regular)(?:\s+presentation)?\s*$/i;
 
 function openReviewValue(content, key) {
   const value = content[key];
@@ -384,7 +388,7 @@ function makeOpenReview(
     const decision = openReviewValue(content, "decision");
     const status = openReviewValue(content, "status");
     if (_OPENREVIEW_REJECT_STATE.test(`${venue} ${venueId} ${decision || ""} ${status || ""}`) || isNonvenue(venue)) return null;
-    if (/^(?:poster|spotlight|oral)(?:\s+presentation)?$/i.test(venue)) return null;
+    if (/^(?:poster|spotlight|oral|regular)(?:\s+presentation)?$/i.test(venue)) return null;
 
     const provenance = [note.domain, note.invitations, note.signatures].map((x) => String(x || "")).join(" ");
     if (/(?:^|[./_\s-])dblp(?:[./_\s-]|$)/i.test(provenance)) return null;

@@ -1,26 +1,26 @@
 canonical,kind,core_tier,aliases,write_as
-NeurIPS,conference,A*,neurips|nips|neural information processing systems|advances in neural information processing systems
-ICML,conference,A*,icml|international conference on machine learning
-ICLR,conference,A*,iclr|international conference on learning representations
-CVPR,conference,A*,cvpr|computer vision and pattern recognition|ieee/cvf conference on computer vision and pattern recognition
+NeurIPS,conference,A*,neurips|nips|neural information processing systems|advances in neural information processing systems,Advances in Neural Information Processing Systems
+ICML,conference,A*,icml|international conference on machine learning,International Conference on Machine Learning
+ICLR,conference,A*,iclr|international conference on learning representations,International Conference on Learning Representations
+CVPR,conference,A*,cvpr|computer vision and pattern recognition|ieee/cvf conference on computer vision and pattern recognition,IEEE/CVF Conference on Computer Vision and Pattern Recognition
 ICCV,conference,A*,iccv|international conference on computer vision,International Conference on Computer Vision
-ECCV,conference,A*,eccv|european conference on computer vision
-AAAI,conference,A*,aaai|association for the advancement of artificial intelligence
-IJCAI,conference,A*,ijcai|international joint conference on artificial intelligence
-ACL,conference,A*,annual meeting of the association for computational linguistics|association for computational linguistics
-EMNLP,conference,A*,emnlp|empirical methods in natural language processing
-NAACL,conference,A,naacl|north american chapter of the association for computational linguistics
-COLT,conference,A*,colt|conference on learning theory|computational learning theory
-UAI,conference,A,uai|uncertainty in artificial intelligence
-AISTATS,conference,A,aistats|artificial intelligence and statistics
-KDD,conference,A*,kdd|knowledge discovery and data mining
-SIGIR,conference,A*,sigir|research and development in information retrieval
-WWW,conference,A*,the web conference|world wide web conference
-WACV,conference,A,wacv|winter conference on applications of computer vision
-ACM MM,conference,A*,acm multimedia|acm international conference on multimedia
-ICRA,conference,A,icra|international conference on robotics and automation
-IROS,conference,A,iros|intelligent robots and systems
-SIGGRAPH,conference,A*,siggraph
+ECCV,conference,A*,eccv|european conference on computer vision,European Conference on Computer Vision
+AAAI,conference,A*,aaai|association for the advancement of artificial intelligence|aaai conference on artificial intelligence,AAAI Conference on Artificial Intelligence
+IJCAI,conference,A*,ijcai|international joint conference on artificial intelligence,International Joint Conference on Artificial Intelligence
+ACL,conference,A*,annual meeting of the association for computational linguistics|association for computational linguistics,Annual Meeting of the Association for Computational Linguistics
+EMNLP,conference,A*,emnlp|empirical methods in natural language processing,Conference on Empirical Methods in Natural Language Processing
+NAACL,conference,A,naacl|north american chapter of the association for computational linguistics|annual conference of the nations of the americas chapter of the association for computational linguistics|conference of the north american chapter of the association for computational linguistics: human language technologies,Annual Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics
+COLT,conference,A*,colt|conference on learning theory|computational learning theory,Conference on Learning Theory
+UAI,conference,A,uai|uncertainty in artificial intelligence,Conference on Uncertainty in Artificial Intelligence
+AISTATS,conference,A,aistats|artificial intelligence and statistics,International Conference on Artificial Intelligence and Statistics
+KDD,conference,A*,kdd|knowledge discovery and data mining,ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+SIGIR,conference,A*,sigir|research and development in information retrieval,International ACM SIGIR Conference on Research and Development in Information Retrieval
+WWW,conference,A*,the web conference|world wide web conference|acm web conference,ACM Web Conference
+WACV,conference,A,wacv|winter conference on applications of computer vision,IEEE/CVF Winter Conference on Applications of Computer Vision
+ACM MM,conference,A*,acm multimedia|acm international conference on multimedia,ACM International Conference on Multimedia
+ICRA,conference,A,icra|international conference on robotics and automation,IEEE International Conference on Robotics and Automation
+IROS,conference,A,iros|intelligent robots and systems,IEEE/RSJ International Conference on Intelligent Robots and Systems
+SIGGRAPH,conference,A*,siggraph|international conference on computer graphics and interactive techniques,International Conference on Computer Graphics and Interactive Techniques
 JMLR,journal,,jmlr|journal of machine learning research
 TPAMI,journal,,tpami|transactions on pattern analysis and machine intelligence
 TMLR,journal,,tmlr|transactions on machine learning research
@@ -30,7 +30,7 @@ Nature,journal,,nature
 Nature Machine Intelligence,journal,,nature machine intelligence
 Science,journal,,science
 CACM,journal,,communications of the acm
-USENIX Security,conference,A*,usenix security
+USENIX Security,conference,A*,usenix security,USENIX Security Symposium
 ACM Computing Surveys,journal,,acm computing surveys|csur
 JASA,journal,,journal of the american statistical association
 TKDE,journal,,transactions on knowledge and data engineering

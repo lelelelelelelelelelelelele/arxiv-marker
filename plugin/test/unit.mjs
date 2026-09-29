@@ -4,6 +4,7 @@
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const R = require("../content/scripts/resolver.js");
+const { RANKINGS } = require("../content/scripts/zm-data.js");
 
 let pass = 0;
 let fail = 0;
@@ -75,8 +76,21 @@ function makeItem(over = {}) {
   eq(R.lookupRanking("Science Robotics"), null, "rejects compound journal Science Robotics");
   eq(R.lookupRanking("NeurIPS 2021").canonical, "NeurIPS", "acronym + year");
   eq(R.lookupRanking("USENIX Security Symposium").canonical, "USENIX Security", "generic suffix Symposium");
+  const oldNaacl = "Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies";
+  for (const venue of [oldNaacl, `${oldNaacl} 2024`]) {
+    eq(R.lookupRanking(venue)?.canonical, "NAACL", "NAACL full name does not collapse to ACL");
+    eq(R.lookupRanking(venue)?.core, "A", "NAACL keeps its own CORE tier");
+  }
   eq(R.lookupRanking("ICCV").write_as, "International Conference on Computer Vision", "write_as ICCV");
-  eq(R.lookupRanking("ICLR").write_as, "", "write_as empty default");
+  eq(R.lookupRanking("ICLR").write_as, "International Conference on Learning Representations", "write_as ICLR");
+  eq(R.lookupRanking("JMLR").write_as, "", "write_as optional for journals");
+  for (const row of RANKINGS.filter((r) => r.kind === "conference")) {
+    ok(row.write_as.split(/\s+/).length >= 2, `${row.canonical} has a full write name`);
+    ok(!/\d/.test(row.write_as), `${row.canonical} write name has no year`);
+    for (const name of [row.write_as, `${row.write_as} 2026`, `Proceedings of the ${row.write_as}`]) {
+      eq(R.lookupRanking(name)?.canonical, row.canonical, `write name maps back: ${name}`);
+    }
+  }
 }
 
 // ===================== util =====================
@@ -190,6 +204,9 @@ function makeItem(over = {}) {
   eq(R.fullName("NeurIPS", null), "Advances in Neural Information Processing Systems", "fullName stopword casing");
   eq(R.fullName("ICLR", "International Conference on Learning Representations"), "International Conference on Learning Representations", "fullName multiword verbatim");
   eq(R.fullName("ICCV", "IEEE International Conference on Computer Vision"), "International Conference on Computer Vision", "fullName write_as pin");
+  for (const raw of ["Some Unknown Conference 2026", "ICML 2026 Workshop", "Findings of the Association for Computational Linguistics: EMNLP 2023"]) {
+    eq(R.fullName(raw, raw), raw, `preserves unmapped venue: ${raw}`);
+  }
   // build skips
   eq(R.buildProposal(makeResolution({ acceptance: "unknown", canonical: null }), null, null, {}), [null, {}], "skip unknown");
   eq(R.buildProposal(makeResolution({ acceptance: "accepted", canonical: null }), null, null, {}), [null, {}], "skip accepted no canonical");
@@ -227,6 +244,13 @@ function openReviewWithNotes(notes, status = 200) {
 }
 
 async function runOpenReviewTests() {
+  for (const venue of ["ICML 2026 regular", "ICML 2026 REGULAR", "ICML 2026 - Regular", "ICML 2026: regular presentation  "]) {
+    const hit = await openReviewWithNotes([openReviewNote("Regular Paper", { venue })])
+      .bestByTitle("Regular Paper", ["Ada Lovelace"], 2026, "2606.10309");
+    eq(hit?.venue_raw, "ICML 2026", `strips regular suffix: ${venue}`);
+    eq(hit?.year, 2026, "regular preserves conference year");
+    eq(hit?.venue_type, "conference", "regular conference type");
+  }
   const tex = "From $f(x)$ and $g(x)$ to $f(g(x))$: LLMs Learn New Skills";
   const rendered = "From f(x) and g(x) to f(g(x)): LLMs Learn New Skills";
   eq(R.openReviewNormTitle(tex), R.openReviewNormTitle(rendered), "OpenReview strips TeX delimiters");
@@ -284,6 +308,8 @@ async function runOpenReviewTests() {
     ["Withdrawn Submission", "ICLR.cc/2026/Conference/Withdrawn_Submission"],
     ["Desk Rejected", "ICLR.cc/2026/Conference/Desk_Rejected_Submission"],
     ["Poster", "ICLR.cc/2026/Conference"],
+    ["Regular", "ICML.cc/2026/Conference"],
+    ["REGULAR presentation", "ICML.cc/2026/Conference"],
   ]) {
     const note = openReviewNote("Exact Title", { venue, venueId, authors: ["Ada Lovelace"] });
     eq(await openReviewWithNotes([note]).bestByTitle("Exact Title", ["Ada Lovelace"], 2026), null, `rejects ${venue}`);
@@ -437,6 +463,43 @@ function fakeOpenReview(hit = null) {
   return { calls, async bestByTitle(t, a, y, id) { calls.push([t, a, y, id]); return hit; } };
 }
 async function runResolveTests() {
+  // Synthetic metadata for the reported arXiv ID; exercise the actual OpenReview
+  // parser through final proposals, alongside equivalent S2 and DBLP inputs.
+  for (const source of ["semantic_scholar", "openreview", "dblp"]) {
+    for (const venue of ["ICML", "ICML 2026", "International Conference on Machine Learning", "International Conference on Machine Learning 2026"]) {
+      const aid = "2606.10309";
+      const item = makeItem({ title: "Regular Paper", archiveID: `arXiv:${aid}`, date: "2026",
+        creators: [{ creatorType: "author", firstName: "Ada", lastName: "Lovelace" }] });
+      const hit = { source, venue_raw: venue, year: 2026, venue_type: "conference" };
+      const s2 = fakeS2(source === "semantic_scholar" ? { [aid]: hit } : {});
+      const dblp = fakeDBLP(source === "dblp" ? hit : null);
+      const calls = [];
+      const openreview = R.makeOpenReview(async (_method, url) => {
+        calls.push(url);
+        return { status: 200, data: { notes: source === "openreview"
+          ? [openReviewNote(item.data.title, { venue: `${venue} regular`, forum: "regular-forum" })] : [] } };
+      });
+      const [res] = await R.resolveItems([item], { s2, openreview, dblp });
+      const label = `${source}: ${venue}`;
+      eq(res.canonical, "ICML", `${label} canonical`);
+      eq(res.core_tier, "A*", `${label} CORE`);
+      eq(res.confidence, 0.85, `${label} confidence`);
+      eq(res.acceptance, "accepted", `${label} acceptance`);
+      eq(res.year, 2026, `${label} year`);
+      eq(res.sources, [source], `${label} source`);
+      eq(res.target_item_type, "conferencePaper", `${label} item type`);
+      eq(res.fields.proceedingsTitle, "International Conference on Machine Learning", `${label} full name`);
+      eq(res.fields.conferenceName, res.fields.proceedingsTitle, `${label} both venue fields`);
+      ok(!("date" in res.fields), `${label} does not overwrite date`);
+      eq(item.data.itemType, "preprint", `${label} only proposes changes`);
+      eq(calls.length, source === "semantic_scholar" ? 0 : 1, `${label} OpenReview calls`);
+      eq(dblp.calls.length, source === "dblp" ? 1 : 0, `${label} DBLP calls`);
+      Object.assign(item.data, res.fields, { itemType: res.target_item_type });
+      const [again] = await R.resolveItems([item], { s2, openreview, dblp });
+      eq(again.target_item_type, null, `${label} no repeat type change`);
+      eq(again.fields, {}, `${label} no repeat write`);
+    }
+  }
   // journal republication prefers original conference
   {
     const item = makeItem({ key: "GAN", title: "Generative Adversarial Nets", archiveID: "arXiv:1406.2661", creators: [{ creatorType: "author", lastName: "Goodfellow" }] });

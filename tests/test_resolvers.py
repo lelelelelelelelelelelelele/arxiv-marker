@@ -122,6 +122,17 @@ class TestSemanticScholarRetry:
 
 
 class TestOpenReview:
+    @pytest.mark.parametrize("venue", [
+        "ICML 2026 regular", "ICML 2026 REGULAR", "ICML 2026 - Regular",
+        "ICML 2026: regular presentation  ",
+    ])
+    def test_regular_is_not_part_of_venue(self, monkeypatch, venue):
+        hit = self._resolve(monkeypatch, [self._note("Regular Paper", venue)],
+                            "Regular Paper", ["Ada Lovelace"], 2026, "2606.10309")
+        assert hit.venue_raw == "ICML 2026"
+        assert hit.year == 2026
+        assert hit.venue_type == "conference"
+
     @staticmethod
     def _note(title, venue="ICML 2026 spotlight", venue_id="ICML.cc/2026/Conference",
               authors=None, forum="forum-id", **content):
@@ -224,6 +235,8 @@ class TestOpenReview:
         ("Withdrawn Submission", "ICLR.cc/2026/Conference/Withdrawn_Submission"),
         ("Desk Rejected", "ICLR.cc/2026/Conference/Desk_Rejected_Submission"),
         ("Poster", "ICLR.cc/2026/Conference"),
+        ("Regular", "ICML.cc/2026/Conference"),
+        ("REGULAR presentation", "ICML.cc/2026/Conference"),
     ])
     def test_rejects_non_published_states(self, monkeypatch, venue, venue_id):
         title = "Exact Title"

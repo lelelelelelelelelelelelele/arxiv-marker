@@ -81,7 +81,7 @@ _OPENREVIEW_REJECT_STATE = re.compile(
     re.I,
 )
 _OPENREVIEW_PRESENTATION = re.compile(
-    r"(?:\s*[-–—,:]\s*|\s+)(?:poster|spotlight|oral)(?:\s+presentation)?\s*$",
+    r"(?:\s*[-–—,:]\s*|\s+)(?:poster|spotlight|oral|regular)(?:\s+presentation)?\s*$",
     re.I,
 )
 _OPENREVIEW_PUNCTUATION = str.maketrans({
@@ -369,7 +369,7 @@ class OpenReview:
         state = " ".join(str(x or "") for x in (venue, venue_id, decision, status))
         if _OPENREVIEW_REJECT_STATE.search(state) or _is_nonvenue(venue):
             return None
-        if re.fullmatch(r"(?:poster|spotlight|oral)(?:\s+presentation)?", venue, re.I):
+        if re.fullmatch(r"(?:poster|spotlight|oral|regular)(?:\s+presentation)?", venue, re.I):
             return None
 
         provenance = " ".join(str(note.get(k) or "") for k in ("domain", "invitations", "signatures"))

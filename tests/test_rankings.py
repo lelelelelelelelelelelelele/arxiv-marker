@@ -71,7 +71,26 @@ def test_accepts_generic_venue_suffix():
     assert rankings.lookup("USENIX Security Symposium")["canonical"] == "USENIX Security"
 
 
+def test_naacl_full_name_does_not_collapse_to_acl():
+    name = "Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies"
+    for venue in (name, f"{name} 2024"):
+        assert rankings.lookup(venue)["canonical"] == "NAACL"
+        assert rankings.lookup(venue)["core"] == "A"
+
+
 def test_write_as_column():
     # Optional column: the exact string to write when S2's name != easyScholar's match value.
     assert rankings.lookup("ICCV")["write_as"] == "International Conference on Computer Vision"
-    assert rankings.lookup("ICLR")["write_as"] == ""        # default empty when unset
+    assert rankings.lookup("ICLR")["write_as"] == "International Conference on Learning Representations"
+    assert rankings.lookup("JMLR")["write_as"] == ""        # optional for journals
+
+
+def test_conference_write_names_are_complete_and_unambiguous():
+    for row in rankings._table():
+        if row["kind"] != "conference":
+            continue
+        name = row["write_as"]
+        assert len(name.split()) >= 2, row["canonical"]
+        assert not any(c.isdigit() for c in name), name
+        for variant in (name, f"{name} 2026", f"Proceedings of the {name}"):
+            assert rankings.lookup(variant)["canonical"] == row["canonical"], variant
