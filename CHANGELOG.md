@@ -6,7 +6,7 @@ All notable changes are documented here. Format based on
 
 ## [Unreleased]
 
-## [0.2.2] — 2026-08-24
+## [0.2.2] — 2026-10-01
 
 ### Added
 - **Structured OpenReview resolver**: recent accepted conference papers can now resolve
@@ -20,6 +20,12 @@ All notable changes are documented here. Format based on
 - OpenReview HTTP 429 responses now honor `Retry-After` when present, otherwise use capped
   exponential backoff with jitter. Requests remain sequential, retries are bounded, duplicate
   papers are cached within each run, and repeated throttling falls through cleanly to DBLP.
+- Known conferences now write standardized full names without a year; the publication year
+  is retained separately.
+
+### Fixed
+- Normalize OpenReview venue labels such as `ICML 2026 regular` to the canonical conference.
+- Prefer longer venue aliases so NAACL full names are not incorrectly matched as ACL.
 
 ## [0.2.1] — 2026-06-07
 
