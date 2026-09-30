@@ -6,6 +6,21 @@ All notable changes are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-24
+
+### Added
+- **Structured OpenReview resolver**: recent accepted conference papers can now resolve
+  through `api2.openreview.net` when Semantic Scholar has no reliable formal venue, before
+  falling through to DBLP. Matching is deterministic and checks normalized titles, authors,
+  publication state, mirror provenance, and ambiguous candidates.
+- Equivalent Python and Zotero JavaScript implementations with mocked positive, negative,
+  malformed-response, fallback, and parity coverage.
+
+### Changed
+- OpenReview HTTP 429 responses now honor `Retry-After` when present, otherwise use capped
+  exponential backoff with jitter. Requests remain sequential, retries are bounded, duplicate
+  papers are cached within each run, and repeated throttling falls through cleanly to DBLP.
+
 ## [0.2.1] — 2026-06-07
 
 ### Fixed

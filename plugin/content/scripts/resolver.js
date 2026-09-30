@@ -119,16 +119,20 @@ function lookupRanking(venueRaw) {
   if (!vTokens.length) return null;
   const blocked = vTokens.some((t) => _DISQUALIFIERS.has(t));
   let substringHit = null;
+  let matchedTokens = 0;
   for (const row of _table()) {
     for (const a of row.aliases) {
       if (v === a) return row;
-      if (blocked || substringHit !== null) continue;
+      if (blocked) continue;
       const at = _tokens(a);
+      // Prefer the complete NAACL alias over the shorter ACL alias inside it.
+      if (at.length <= matchedTokens) continue;
       const idx = _runIndex(vTokens, at);
       if (idx < 0) continue;
       const after = vTokens.slice(idx + at.length);
       if (after.length && !after.every((t) => /^\d+$/.test(t) || _GENERIC_SUFFIX.has(t))) continue;
       substringHit = row;
+      matchedTokens = at.length;
     }
   }
   return substringHit;
@@ -160,9 +164,85 @@ function _authorsOf(info) {
   return (a || []).filter((x) => x && typeof x === "object").map((x) => x.text || "");
 }
 
+const _OPENREVIEW_SEARCH = "https://api2.openreview.net/notes/search";
+const _OPENREVIEW_REJECT_STATE =
+  /\b(?:submitted|submission|reject(?:ed|ion)?|withdrawn)\b|\bunder[\s_-]+review\b|\bdesk[\s_-]+rejected\b/i;
+const _OPENREVIEW_PRESENTATION =
+  /(?:\s*[-–—,:]\s*|\s+)(?:poster|spotlight|oral|regular)(?:\s+presentation)?\s*$/i;
+
+function openReviewValue(content, key) {
+  const value = content[key];
+  if (value && typeof value === "object" && !Array.isArray(value) && "value" in value) return value.value;
+  return value;
+}
+
+function openReviewRenderedTitle(value) {
+  if (!value) return "";
+  value = String(value)
+    .normalize("NFKC")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[‐‑‒–—]/g, "-")
+    .replace(/\u00a0/g, " ");
+  for (const delimiter of ["\\(", "\\)", "\\[", "\\]"]) value = value.split(delimiter).join("");
+  return value.replace(/\$/g, "").replace(/\s+/g, " ").trim();
+}
+
+function openReviewNormTitle(value) {
+  return openReviewRenderedTitle(value).toLowerCase();
+}
+
+function openReviewTitleQuality(query, candidate) {
+  const q = openReviewNormTitle(query);
+  const c = openReviewNormTitle(candidate);
+  if (!q || !c) return 0;
+  if (q === c) return 2;
+  if (c.startsWith(q + ":") || q.startsWith(c + ":")) return 1;
+  return 0;
+}
+
+function openReviewSurname(name) {
+  let value = String(name || "");
+  if (value.includes(",")) value = value.split(",", 1)[0];
+  value = value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+  const parts = value.match(/\p{L}+/gu) || [];
+  while (parts.length && ["jr", "sr", "ii", "iii", "iv"].includes(parts[parts.length - 1])) parts.pop();
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
+function openReviewAuthorMatch(expected, candidate) {
+  const exp = (expected || []).map(openReviewSurname).filter(Boolean);
+  const got = (candidate || []).map(openReviewSurname).filter(Boolean);
+  if (!exp.length || !got.length) return { ok: true, overlap: 0, first: false };
+  const expSet = new Set(exp);
+  const gotSet = new Set(got);
+  let overlap = 0;
+  for (const surname of expSet) if (gotSet.has(surname)) overlap++;
+  const first = exp[0] === got[0];
+  return { ok: first || overlap >= 2, overlap, first };
+}
+
+function openReviewYear(content, venue, venueId) {
+  const value = openReviewValue(content, "year");
+  if (/^\d+$/.test(String(value || ""))) return parseInt(value, 10);
+  const match = `${venue} ${venueId}`.match(/\b(?:19|20)\d{2}\b/);
+  return match ? parseInt(match[0], 10) : null;
+}
+
+function openReviewDoi(content) {
+  for (const key of ["doi", "DOI"]) {
+    const value = openReviewValue(content, key);
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
 const _S2_FIELDS =
   "title,venue,publicationVenue,year,externalIds,publicationTypes,citationCount,influentialCitationCount";
 const _S2_BATCH = "https://api.semanticscholar.org/graph/v1/paper/batch";
+const _OPENREVIEW_MAX_RETRIES = 2;
+const _OPENREVIEW_BACKOFF_MS = 1000;
+const _OPENREVIEW_MAX_DELAY_MS = 30000;
 
 function _defaultSleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -230,6 +310,177 @@ function makeS2(request, apiKey, sleep) {
   }
 
   return { batchByArxiv };
+}
+
+function makeOpenReview(
+  request,
+  sleep = _defaultSleep,
+  randomFn = Math.random,
+  maxRetries = _OPENREVIEW_MAX_RETRIES,
+  backoffMs = _OPENREVIEW_BACKOFF_MS,
+  maxDelayMs = _OPENREVIEW_MAX_DELAY_MS,
+) {
+  maxRetries = Math.max(0, Math.trunc(maxRetries));
+  backoffMs = Math.max(0, Number(backoffMs));
+  maxDelayMs = Math.max(0, Number(maxDelayMs));
+
+  function header(res, name) {
+    const headers = res && res.headers;
+    if (!headers) return null;
+    if (typeof headers.get === "function") return headers.get(name);
+    const wanted = name.toLowerCase();
+    for (const [key, value] of Object.entries(headers)) {
+      if (key.toLowerCase() === wanted) return value;
+    }
+    return null;
+  }
+
+  function retryAfterMs(res) {
+    const raw = header(res, "Retry-After");
+    if (raw === null || raw === undefined) return null;
+    const numeric = Number(raw);
+    let delay;
+    if (Number.isFinite(numeric)) delay = numeric * 1000;
+    else {
+      const retryAt = Date.parse(String(raw));
+      if (!Number.isFinite(retryAt)) return null;
+      delay = retryAt - Date.now();
+    }
+    // Retry-After is authoritative. maxDelayMs caps only our generated backoff.
+    return Math.max(0, delay);
+  }
+
+  function retryDelayMs(res, retryNumber) {
+    const retryAfter = retryAfterMs(res);
+    if (retryAfter !== null) return retryAfter;
+    const delay = backoffMs * (2 ** retryNumber) + randomFn() * backoffMs;
+    return Math.min(delay, maxDelayMs);
+  }
+
+  function candidateFromNote(note, title, authors, year, arxivId) {
+    if (!note || typeof note !== "object" || !note.content || typeof note.content !== "object") return null;
+    const content = note.content;
+    const candidateTitle = openReviewValue(content, "title");
+    if (typeof candidateTitle !== "string") return null;
+    const titleQuality = openReviewTitleQuality(title, candidateTitle);
+    if (!titleQuality) return null;
+
+    const rawAuthors = openReviewValue(content, "authors");
+    const candidateAuthors = Array.isArray(rawAuthors) ? rawAuthors.filter((x) => typeof x === "string") : [];
+    const authorMatch = openReviewAuthorMatch(authors, candidateAuthors);
+    if (!authorMatch.ok || (titleQuality === 1 && (!(authors || []).length || !candidateAuthors.length))) return null;
+
+    if (arxivId) {
+      for (const key of ["arxiv", "arxiv_id", "arxivId"]) {
+        const value = openReviewValue(content, key);
+        if (typeof value === "string") {
+          const match = value.match(/\d{4}\.\d{4,5}/);
+          if (match && match[0] !== arxivId) return null;
+        }
+      }
+    }
+
+    const venueValue = openReviewValue(content, "venue");
+    const venueIdValue = openReviewValue(content, "venueid") || openReviewValue(content, "venue_id");
+    if (typeof venueValue !== "string" || typeof venueIdValue !== "string") return null;
+    const venue = venueValue.trim();
+    const venueId = venueIdValue.trim();
+    const decision = openReviewValue(content, "decision");
+    const status = openReviewValue(content, "status");
+    if (_OPENREVIEW_REJECT_STATE.test(`${venue} ${venueId} ${decision || ""} ${status || ""}`) || isNonvenue(venue)) return null;
+    if (/^(?:poster|spotlight|oral|regular)(?:\s+presentation)?$/i.test(venue)) return null;
+
+    const provenance = [note.domain, note.invitations, note.signatures].map((x) => String(x || "")).join(" ");
+    if (/(?:^|[./_\s-])dblp(?:[./_\s-]|$)/i.test(provenance)) return null;
+
+    const venueRaw = venue.replace(_OPENREVIEW_PRESENTATION, "").trim();
+    if (!venueRaw || isNonvenue(venueRaw)) return null;
+    const row = lookupRanking(venueRaw);
+    const venueScope = `${venueId} ${note.domain || ""}`.toLowerCase();
+    const isWorkshop = venueScope.includes("/workshop") || venueRaw.toLowerCase().includes("workshop");
+    const isMainConference = venueScope.includes("/conference") && !isWorkshop;
+    let venueType = null;
+    if (venueScope.includes("/conference") || venueScope.includes("/workshop")) venueType = "conference";
+    else if (row) venueType = row.kind;
+    else return null;
+
+    const candidateYear = openReviewYear(content, venueRaw, venueId);
+    const forum = note.forum || note.id;
+    if (typeof forum !== "string" || !forum) return null;
+    const hit = {
+      source: "openreview",
+      venue_raw: venueRaw,
+      year: candidateYear,
+      venue_type: venueType,
+      citation_count: null,
+      influential_citations: null,
+      external_doi: openReviewDoi(content),
+      dblp_key: null,
+      evidence_url: "https://openreview.net/forum?id=" + encodeURIComponent(forum),
+      issn: null,
+      abbrev: null,
+    };
+    let score = titleQuality * 100;
+    if (authorMatch.first) score += 20;
+    score += Math.min(authorMatch.overlap, 5) * 2;
+    if (year !== null && year !== undefined && candidateYear === year) score += 5;
+    if (isMainConference) score += 8;
+    if (row && row.kind === "conference") score += 4;
+    if (isWorkshop) score -= 4;
+    return { score, hit };
+  }
+
+  async function search(term) {
+    if (typeof request !== "function") return null;
+    const params =
+      "term=" + encodeURIComponent(term) + "&content=title&type=exact&source=forum&limit=25";
+    let payload = null;
+    for (let retryNumber = 0; retryNumber <= maxRetries; retryNumber++) {
+      try {
+        const res = await request("GET", _OPENREVIEW_SEARCH + "?" + params, {});
+        if (res && res.status === 429) {
+          if (retryNumber >= maxRetries) return null;
+          await sleep(retryDelayMs(res, retryNumber));
+          continue;
+        }
+        if (!res || res.status < 200 || res.status >= 300) return null;
+        payload = res.data;
+        break;
+      } catch (e) {
+        return null;
+      }
+    }
+    if (!payload || typeof payload !== "object" || !Array.isArray(payload.notes)) return null;
+    return payload.notes;
+  }
+
+  async function bestByTitle(title, authors = [], year = null, arxivId = null) {
+    const rendered = openReviewRenderedTitle(title);
+    const notes = await search(rendered || title);
+    if (!notes || !notes.length) return null;
+    const candidates = [];
+    for (const note of notes) {
+      try {
+        const candidate = candidateFromNote(note, title, authors || [], year, arxivId);
+        if (candidate) candidates.push(candidate);
+      } catch (e) {
+        // One malformed Note must not abort the item or block the DBLP fallback.
+      }
+    }
+    if (!candidates.length) return null;
+    const bestScore = Math.max(...candidates.map((x) => x.score));
+    const best = candidates.filter((x) => x.score === bestScore).map((x) => x.hit);
+    const identities = new Set(best.map((h) => `${h.venue_raw.toLowerCase()}\u0000${h.year}`));
+    if (identities.size > 1) return null;
+    best.sort((a, b) => {
+      const au = a.evidence_url || "";
+      const bu = b.evidence_url || "";
+      return au < bu ? -1 : au > bu ? 1 : 0;
+    });
+    return best[0];
+  }
+
+  return { bestByTitle };
 }
 
 function makeDBLP(request) {
@@ -322,6 +573,20 @@ function itemYear(data) {
   return null;
 }
 
+function itemAuthors(data) {
+  const authors = [];
+  for (const creator of data.creators || []) {
+    if (creator.creatorType !== "author") continue;
+    if (creator.name) {
+      authors.push(creator.name);
+      continue;
+    }
+    const name = [creator.firstName, creator.lastName].filter(Boolean).join(" ");
+    if (name) authors.push(name);
+  }
+  return authors;
+}
+
 function chooseVenue(hits) {
   const scored = [];
   for (const h of hits) {
@@ -383,9 +648,12 @@ async function resolveItems(items, opts = {}) {
   const request = opts.request;
   const cmap = opts.collectionsMap || {};
   const today = opts.today || _todayStr();
-  // opts.s2 / opts.dblp let tests inject fakes (mirrors the Python suite); production
-  // builds them from the injected request.
+  // Resolver options let tests inject fakes (mirrors the Python suite); production builds
+  // all three structured clients from the injected request.
   const s2 = opts.s2 || makeS2(request, opts.s2ApiKey, opts.sleep);
+  const openreview = opts.openreview !== undefined
+    ? opts.openreview
+    : typeof request === "function" ? makeOpenReview(request, opts.sleep) : null;
   const dblp = opts.dblp || makeDBLP(request);
 
   const arxivOf = {};
@@ -394,6 +662,9 @@ async function resolveItems(items, opts = {}) {
   const s2map = ids.length ? await s2.batchByArxiv(ids) : {};
 
   const results = [];
+  // The loop awaits each item (max OpenReview concurrency: one); cache both hits and
+  // misses so duplicate Zotero items do not repeat a lookup within this resolution run.
+  const openreviewCache = new Map();
   for (const it of items) {
     const data = it.data;
     const key = it.key;
@@ -402,13 +673,28 @@ async function resolveItems(items, opts = {}) {
     const s2hit = aid ? s2map[aid] || null : null;
 
     const hits = [s2hit].filter(Boolean);
-    let needDblp = !s2hit || !s2hit.venue_raw;
-    if (!needDblp) {
+    let needFallback = !s2hit || !s2hit.venue_raw;
+    if (!needFallback) {
       const row = lookupRanking(s2hit.venue_raw);
-      if (!(row && row.kind === "conference")) needDblp = true;
+      if (!(row && row.kind === "conference")) needFallback = true;
     }
-    if (needDblp) {
-      const yearHint = (s2hit && s2hit.year) || itemYear(data);
+    const yearHint = (s2hit && s2hit.year) || itemYear(data);
+    let openreviewHit = null;
+    if (needFallback && openreview) {
+      const authors = itemAuthors(data);
+      const cacheKey = aid
+        ? `arxiv:${aid}`
+        : JSON.stringify(["metadata", normTitle(title), authors, yearHint]);
+      if (!openreviewCache.has(cacheKey)) {
+        openreviewCache.set(
+          cacheKey,
+          await openreview.bestByTitle(title, authors, yearHint, aid),
+        );
+      }
+      openreviewHit = openreviewCache.get(cacheKey);
+      if (openreviewHit) hits.push(openreviewHit);
+    }
+    if (needFallback && !openreviewHit) {
       const dblpHit = await dblp.bestByTitle(title, firstAuthorLastname(data), yearHint);
       if (dblpHit) hits.push(dblpHit);
     }
@@ -457,7 +743,8 @@ async function resolveItems(items, opts = {}) {
       res.suggested_tags = buildTags(res);
     }
 
-    const [itype, fields] = buildProposal(res, s2hit, aid, data, today);
+    const proposalHit = chosen && chosen.source === "openreview" && chosen.external_doi ? chosen : s2hit;
+    const [itype, fields] = buildProposal(res, proposalHit, aid, data, today);
     res.target_item_type = itype;
     res.fields = fields;
 
@@ -564,9 +851,9 @@ function buildProposal(res, s2hit, arxivId, data, today) {
 // --- exports (Node test harness only; under loadSubScript these live in the scope) -----
 var ZMResolver = {
   extractArxivId, normTitle, titleJaccard, titleMatch, firstAuthorLastname,
-  lookupRanking, isNonvenue,
-  makeS2, makeDBLP,
-  citeBucket, itemYear, chooseVenue, confidence, buildTags, duplicateArxivGroups,
+  lookupRanking, isNonvenue, openReviewNormTitle, openReviewTitleQuality,
+  makeS2, makeOpenReview, makeDBLP,
+  citeBucket, itemYear, itemAuthors, chooseVenue, confidence, buildTags, duplicateArxivGroups,
   resolveItems, overridesGet,
   isArxivDoi, smartTitle, fullName, buildProposal,
 };

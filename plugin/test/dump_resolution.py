@@ -12,7 +12,7 @@ REPO_ROOT = HERE.parent.parent  # plugin/test -> plugin -> repo root
 sys.path.insert(0, str(REPO_ROOT))
 
 from arxiv_marker.pipeline import resolve_items  # noqa: E402
-from arxiv_marker.resolvers import DBLP, SemanticScholar  # noqa: E402
+from arxiv_marker.resolvers import DBLP, OpenReview, SemanticScholar  # noqa: E402
 
 FIELD_KEYS = ["proceedingsTitle", "conferenceName", "publicationTitle",
               "journalAbbreviation", "ISSN", "DOI", "publisher"]
@@ -42,7 +42,7 @@ def main():
         "date": c.get("date", ""), "creators": c.get("creators", []),
         "itemType": "preprint", "extra": "", "tags": [],
     }} for c in cases]
-    results = resolve_items(items, SemanticScholar(), DBLP())
+    results = resolve_items(items, SemanticScholar(), DBLP(), openreview=OpenReview())
     print(json.dumps([normalize(r) for r in results], ensure_ascii=False, indent=2))
 
 

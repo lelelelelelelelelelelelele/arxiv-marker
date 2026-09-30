@@ -26,9 +26,9 @@ arxiv-marker **converts the itemType** and fills the venue + identifiers, keepin
 id and citation count in `Extra`.
 
 It is deliberately **deterministic-first**: venues are resolved for free via Semantic
-Scholar (keyed on the arXiv id) and DBLP, with ~zero hallucination. Hard cases are left for
-review instead of guessed. Everything runs **inside Zotero** — no Python, no local server,
-no Web API key.
+Scholar (keyed on the arXiv id), the structured OpenReview API, and DBLP, with ~zero
+hallucination. Hard cases are left for review instead of guessed. Everything runs **inside
+Zotero** — no Python, no local server, no Web API key.
 
 > **Why not the existing arXiv plugins?** They merge on the *published DOI* the author
 > registered on the arXiv page. NeurIPS / ICLR / older CVPR have **no Crossref DOI** (they
@@ -92,7 +92,7 @@ Those fields then plug into the existing ecosystem:
 
 ## Limitations
 
-- **Venue-name mapping is not exhaustive** — Semantic Scholar / DBLP venue names do not
+- **Venue-name mapping is not exhaustive** — Semantic Scholar / OpenReview / DBLP venue names do not
   always match the exact strings easyScholar uses. This project uses `write_as` in
   `data/venue_rankings.csv` for common top venues, but it is not a complete knowledge base;
   long-tail venues may need an added mapping or a manual `data/overrides.csv` entry.
@@ -107,7 +107,7 @@ Rule-based, **not** an LLM's self-reported number:
 
 | confidence | meaning | written by default? |
 |---|---|---|
-| 0.95 | ≥2 independent sources (S2 + DBLP) agree on a known venue | ✓ |
+| 0.95 | ≥2 independent structured sources agree on a known venue | ✓ |
 | 0.85 | one source, venue recognized in the ranking table | ✓ |
 | 0.60 | a venue string was found, but it's not in the ranking table | ✗ |
 | 0.00 | no venue found → `acceptance=unknown` | ✗ |
@@ -132,7 +132,7 @@ always win and are labelled `source=override` in the report. After editing eithe
 The same deterministic resolver also ships as a Python CLI (and an optional local web UI),
 for batch processing, scripting, or running headless. The plugin is a faithful port of this
 resolver — the two are kept in lock-step by a [parity test](plugin/test/parity.mjs) that runs
-both against live Semantic Scholar / DBLP.
+both against live Semantic Scholar / OpenReview / DBLP.
 
 Uses [uv](https://docs.astral.sh/uv/). Clone, then:
 
@@ -170,12 +170,13 @@ are never touched.
 Yes. DBLP is free and needs no key; the Zotero APIs are free; a Semantic Scholar key is
 optional (it only lifts rate limits).
 
-**What is DBLP, and why use it alongside Semantic Scholar?**
+**What is DBLP, and why use it alongside Semantic Scholar and OpenReview?**
 [DBLP](https://dblp.org) is a free, open computer-science bibliography (maintained by
 Schloss Dagstuhl). It has the best coverage of CS *conferences* — exactly where Crossref
-and Semantic Scholar are weakest. arxiv-marker uses it as a fallback: when S2 returns no
-venue, or a later journal reprint, DBLP recovers the original conference by title + author
-+ year (e.g. *Generative Adversarial Networks*: S2 says CACM, DBLP finds NeurIPS 2014).
+and Semantic Scholar are weakest. OpenReview is checked first for a formal accepted record;
+if that is absent, DBLP remains the fallback. For example, when S2 returns a later journal
+reprint, DBLP can recover the original conference by title + author + year (e.g.
+*Generative Adversarial Networks*: S2 says CACM, DBLP finds NeurIPS 2014).
 
 **Does it only work on arXiv papers?**
 It processes Zotero `preprint` items only — your already-published entries are never
@@ -222,8 +223,8 @@ CI (GitHub Actions) runs ruff + pytest on Python 3.10–3.13. See
 
 - **Citation refresh** — update the `Citations:` line in `Extra` for items that were already
   written.
-- **Harder venue cases** — add reviewable web evidence when Semantic Scholar and DBLP both
-  miss.
+- **Harder venue cases** — add reviewable web evidence when Semantic Scholar, OpenReview,
+  and DBLP all miss.
 - **Wider field coverage** — venue resolution beyond CS/ML.
 
 ## Layout

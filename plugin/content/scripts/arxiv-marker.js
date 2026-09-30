@@ -1,6 +1,6 @@
 // arxiv-marker — Zotero glue. Runs inside Zotero (loaded via bootstrap loadSubScript).
 // Uses ZMResolver (the ported resolver, shares this scope) + Zotero APIs to: read the
-// selected items, resolve venues against live S2/DBLP, preview in a review dialog, and
+// selected items, resolve venues against live S2/OpenReview/DBLP, preview in a review dialog, and
 // write the venue field back DIRECTLY to the local library (no Web API, no API key).
 
 if (typeof Zotero === "undefined") {
@@ -101,7 +101,14 @@ async function zoteroRequest(method, url, opts = {}) {
         data = null;
       }
     }
-    return { status: xhr.status, data };
+    const retryAfter = typeof xhr.getResponseHeader === "function"
+      ? xhr.getResponseHeader("Retry-After")
+      : null;
+    return {
+      status: xhr.status,
+      data,
+      headers: retryAfter == null ? {} : { "retry-after": retryAfter },
+    };
   } catch (e) {
     Zotero.debug("arxiv-marker request error: " + e);
     return { status: 0, data: null };

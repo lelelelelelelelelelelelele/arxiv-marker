@@ -14,7 +14,7 @@ uv run ruff check .     # lint
 ## Guidelines
 
 - **Keep the deterministic-first design.** Prefer structured sources (Semantic Scholar,
-  DBLP) over guesses; the LLM path is a last-resort stub for a reason.
+  OpenReview, DBLP) over guesses; the LLM path is a last-resort stub for a reason.
 - **Writes to Zotero must stay idempotent and reversible-by-review.** Tool-managed `Extra`
   lines are rewritten, never duplicated; nothing is written without an explicit pick.
 - **Add tests for new behavior**, and mock the network — the suite must never hit a live API.

@@ -65,7 +65,8 @@ def _run_index(hay: list[str], needle: list[str]) -> int:
 def lookup(venue_raw: str | None) -> dict | None:
     """Map a raw venue string to a ranking-table row, or None.
 
-    Exact alias match wins. Otherwise an alias may match as a contiguous whole-word run,
+    Exact alias match wins. Otherwise prefer the longest matching whole-word alias
+    (e.g. NAACL's full name contains ACL's shorter alias). An alias may match as a run,
     but only when (a) the string carries no workshop/findings-style qualifier and (b) no
     extra alphabetic word immediately follows the run — so 'Nature Communications',
     'International Conference on Machine Learning and Applications', and 'NeurIPS Workshop'
@@ -79,13 +80,16 @@ def lookup(venue_raw: str | None) -> dict | None:
         return None
     blocked = any(d in v_tokens for d in _DISQUALIFIERS)
     substring_hit = None
+    matched_tokens = 0
     for row in _table():
         for a in row["aliases"]:
             if v == a:
                 return row
-            if blocked or substring_hit is not None:
+            if blocked:
                 continue
             at = _tokens(a)
+            if len(at) <= matched_tokens:
+                continue
             idx = _run_index(v_tokens, at)
             if idx < 0:
                 continue
@@ -93,4 +97,5 @@ def lookup(venue_raw: str | None) -> dict | None:
             if after and not all(t.isdigit() or t in _GENERIC_SUFFIX for t in after):
                 continue        # a non-generic trailing word => different/compound venue
             substring_hit = row
+            matched_tokens = len(at)
     return substring_hit

@@ -3,8 +3,8 @@
     "arxiv-marker@lele.dev": {
       "updates": [
         {
-          "version": "0.2.1",
-          "update_link": "https://github.com/lelelelelelelelelelelelele/arxiv-marker/releases/download/v0.2.1/arxiv-marker-0.2.1.xpi",
+          "version": "0.2.2",
+          "update_link": "https://github.com/lelelelelelelelelelelelele/arxiv-marker/releases/download/v0.2.2/arxiv-marker-0.2.2.xpi",
           "applications": {
             "zotero": {
               "strict_min_version": "6.999",

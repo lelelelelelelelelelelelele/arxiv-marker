@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 from arxiv_marker import pipeline
@@ -10,7 +12,7 @@ from arxiv_marker.pipeline import (
     duplicate_arxiv_groups,
     resolve_items,
 )
-from arxiv_marker.resolvers import VenueHit
+from arxiv_marker.resolvers import OpenReview, VenueHit
 
 
 class TestCiteBucket:
@@ -109,7 +111,66 @@ class _FakeDBLP:
         return self.hit
 
 
+class _FakeOpenReview:
+    def __init__(self, hit=None):
+        self.hit = hit
+        self.calls = []
+
+    def best_by_title(self, title, authors, year, arxiv_id):
+        self.calls.append((title, authors, year, arxiv_id))
+        return self.hit
+
+
 class TestResolveItems:
+    @pytest.mark.parametrize("source", ["semantic_scholar", "openreview", "dblp"])
+    @pytest.mark.parametrize("venue", [
+        "ICML", "ICML 2026", "International Conference on Machine Learning",
+        "International Conference on Machine Learning 2026",
+    ])
+    def test_conference_write_name_is_independent_of_source(
+            self, monkeypatch, make_item, source, venue):
+        # Synthetic metadata for the reported arXiv ID; no live paper/API dependency.
+        aid = "2606.10309"
+        item = make_item(title="Regular Paper", archiveID=f"arXiv:{aid}", date="2026",
+                         creators=[{"creatorType": "author", "firstName": "Ada",
+                                    "lastName": "Lovelace"}])
+        hit = VenueHit(source=source, venue_raw=venue, year=2026, venue_type="conference")
+        s2 = _FakeS2({aid: hit} if source == "semantic_scholar" else {})
+        dblp = _FakeDBLP(hit if source == "dblp" else None)
+        openreview = OpenReview()
+        note = {"forum": "regular-forum", "content": {
+            "title": {"value": item["data"]["title"]},
+            "authors": {"value": ["Ada Lovelace"]},
+            "venue": {"value": f"{venue} regular"},
+            "venueid": {"value": "ICML.cc/2026/Conference"},
+        }}
+        response = Mock()
+        response.json.return_value = {"notes": [note] if source == "openreview" else []}
+        response.status_code = 200
+        request = Mock(return_value=response)
+        monkeypatch.setattr(openreview.s, "get", request)
+
+        [res] = resolve_items([item], s2, dblp, openreview=openreview)
+        assert res.canonical == "ICML"
+        assert res.core_tier == "A*"
+        assert res.confidence == 0.85
+        assert res.acceptance == "accepted"
+        assert res.year == 2026
+        assert res.sources == [source]
+        assert res.target_item_type == "conferencePaper"
+        name = "International Conference on Machine Learning"
+        assert res.fields["proceedingsTitle"] == res.fields["conferenceName"] == name
+        assert "date" not in res.fields
+        assert item["data"]["itemType"] == "preprint"  # proposal does not mutate the item
+        assert request.call_count == (0 if source == "semantic_scholar" else 1)
+        assert len(dblp.calls) == (1 if source == "dblp" else 0)
+
+        # Applying the proposal then resolving again must not propose another rewrite.
+        item["data"].update(res.fields, itemType=res.target_item_type)
+        [again] = resolve_items([item], s2, dblp, openreview=openreview)
+        assert again.target_item_type is None
+        assert again.fields == {}
+
     def test_journal_republication_prefers_original_conference(self, make_item):
         item = make_item(key="GAN", title="Generative Adversarial Nets",
                          archiveID="arXiv:1406.2661",
@@ -132,11 +193,60 @@ class TestResolveItems:
             source="semantic_scholar",
             venue_raw="International Conference on Learning Representations",
             year=2021, venue_type="conference", citation_count=10)})
+        openreview = _FakeOpenReview()
         dblp = _FakeDBLP()
-        [res] = resolve_items([item], s2, dblp)
+        [res] = resolve_items([item], s2, dblp, openreview=openreview)
         assert res.canonical == "ICLR"
         assert res.target_item_type == "conferencePaper"
+        assert openreview.calls == []
         assert dblp.calls == []
+
+    def test_openreview_resolves_before_dblp(self, make_item):
+        item = make_item(
+            key="OR", title="Recent Paper", archiveID="arXiv:2601.00001", date="2026",
+            creators=[{"creatorType": "author", "firstName": "Ada", "lastName": "Lovelace"}],
+        )
+        s2 = _FakeS2({"2601.00001": VenueHit(
+            source="semantic_scholar", venue_raw=None, citation_count=3)})
+        openreview = _FakeOpenReview(VenueHit(
+            source="openreview", venue_raw="ICML 2026", year=2026,
+            venue_type="conference", external_doi="10.1234/recent",
+            evidence_url="https://openreview.net/forum?id=x"))
+        dblp = _FakeDBLP(VenueHit(source="dblp", venue_raw="NeurIPS", year=2026))
+        [res] = resolve_items([item], s2, dblp, openreview=openreview)
+        assert res.canonical == "ICML"
+        assert res.acceptance == "accepted"
+        assert res.confidence == 0.85
+        assert res.sources == ["semantic_scholar", "openreview"]
+        assert res.fields["DOI"] == "10.1234/recent"
+        assert openreview.calls == [("Recent Paper", ["Ada Lovelace"], 2026, "2601.00001")]
+        assert dblp.calls == []
+
+    def test_openreview_miss_falls_through_to_dblp(self, make_item):
+        item = make_item(key="F", title="Fallback Paper", archiveID="arXiv:2601.00002",
+                         creators=[{"creatorType": "author", "lastName": "Lovelace"}])
+        s2 = _FakeS2({"2601.00002": VenueHit(source="semantic_scholar", venue_raw=None)})
+        openreview = _FakeOpenReview(None)
+        dblp = _FakeDBLP(VenueHit(
+            source="dblp", venue_raw="ICLR", year=2026, venue_type="conference"))
+        [res] = resolve_items([item], s2, dblp, openreview=openreview)
+        assert res.canonical == "ICLR"
+        assert len(openreview.calls) == 1
+        assert dblp.calls == [("Fallback Paper", "Lovelace", 2021)]
+
+    def test_duplicate_arxiv_items_share_openreview_lookup(self, make_item):
+        items = [
+            make_item(key="A", title="Duplicate Paper", archiveID="arXiv:2601.00003"),
+            make_item(key="B", title="Duplicate Paper", archiveID="arXiv:2601.00003"),
+        ]
+        s2 = _FakeS2({"2601.00003": VenueHit(
+            source="semantic_scholar", venue_raw=None)})
+        openreview = _FakeOpenReview(VenueHit(
+            source="openreview", venue_raw="ICML 2026", year=2026,
+            venue_type="conference"))
+        results = resolve_items(items, s2, _FakeDBLP(), openreview=openreview)
+        assert [r.canonical for r in results] == ["ICML", "ICML"]
+        assert len(openreview.calls) == 1
 
     def test_journal_venue_not_in_table_becomes_journal_article(self, make_item):
         # Regression: a journal venue NOT in the ranking table (TNNLS / Science Robotics) must

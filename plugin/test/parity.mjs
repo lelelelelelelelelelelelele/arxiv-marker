@@ -1,5 +1,5 @@
 // Parity test: run the JS resolver and the Python resolver on the SAME real arXiv IDs
-// against the LIVE Semantic Scholar + DBLP APIs, then diff their normalized outputs.
+// against the LIVE Semantic Scholar + OpenReview + DBLP APIs, then diff their outputs.
 // "Logic" fields must match exactly; citation_count is a live-changing value passed
 // straight through from S2, so a difference there is reported as drift, not a failure.
 // Run: node test/parity.mjs   (from plugin/)
@@ -20,7 +20,12 @@ async function nodeRequest(method, url, { headers, body } = {}) {
   const res = await fetch(url, { method, headers, body });
   let data = null;
   try { data = await res.json(); } catch { /* leave null */ }
-  return { status: res.status, data };
+  const retryAfter = res.headers.get("retry-after");
+  return {
+    status: res.status,
+    data,
+    headers: retryAfter == null ? {} : { "retry-after": retryAfter },
+  };
 }
 
 function normalizeJs(res) {
@@ -49,8 +54,11 @@ async function main() {
     data: { title: c.title, archiveID: c.archiveID || "", date: c.date || "", creators: c.creators || [], itemType: "preprint", extra: "", tags: [] },
   }));
 
-  console.log("running JS resolver against live S2 + DBLP …");
-  const jsResRaw = await R.resolveItems(items, { request: nodeRequest });
+  console.log("running JS resolver against live S2 + OpenReview + DBLP …");
+  const jsResRaw = await R.resolveItems(items, {
+    request: nodeRequest,
+    s2ApiKey: process.env.S2_API_KEY || null,
+  });
   const jsRes = jsResRaw.map(normalizeJs);
 
   const py = pickPython();
@@ -59,7 +67,7 @@ async function main() {
     console.log(JSON.stringify(jsRes, null, 2));
     process.exit(2);
   }
-  console.log(`running Python resolver (${py}) against live S2 + DBLP …`);
+  console.log(`running Python resolver (${py}) against live S2 + OpenReview + DBLP …`);
   const pyProc = spawnSync(py, [resolve(here, "dump_resolution.py")], { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
   if (pyProc.status !== 0) {
     console.error("python dumper failed:\n" + pyProc.stderr);

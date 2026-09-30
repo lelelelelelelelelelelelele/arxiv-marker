@@ -1,3 +1,5 @@
+import pytest
+
 from arxiv_marker import proposal
 
 
@@ -103,7 +105,7 @@ class TestExtraIdempotency:
 
 class TestFullName:
     def test_preserves_stopword_casing(self):
-        # single-token venue_raw forces the alias fallback; stopwords must stay lowercase
+        # The configured full name preserves interior stopword casing.
         assert proposal._full_name("NeurIPS", None) == \
             "Advances in Neural Information Processing Systems"
 
@@ -117,6 +119,13 @@ class TestFullName:
         # the CCF tag blank. `write_as` pins the prefix-less string easyScholar matches.
         assert proposal._full_name("ICCV", "IEEE International Conference on Computer Vision") \
             == "International Conference on Computer Vision"
+
+    @pytest.mark.parametrize("raw", [
+        "Some Unknown Conference 2026", "ICML 2026 Workshop",
+        "Findings of the Association for Computational Linguistics: EMNLP 2023",
+    ])
+    def test_unmapped_venues_are_preserved(self, raw):
+        assert proposal._full_name(raw, raw) == raw
 
 
 class TestBuildSkips:
